@@ -147,7 +147,7 @@ financeRouter.get('/dashboard/summary', async (req, res, next) => {
       income,
       expenses,
       savingsContributions,
-      available: income - expenses - savingsContributions,
+      available: income - expenses,
       budgetTotal,
       savingsTotal,
       budgetGroups,
