@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: control-financiero-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: control_financiero
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app_local
+    ports:
+      - "5432:5432"
+    volumes:
+      - control_financiero_data:/var/lib/postgresql/data
+
+volumes:
+  control_financiero_data:
