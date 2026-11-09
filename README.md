@@ -41,3 +41,4 @@ La versión actual es de uso local y para una sola persona; todavía no incluye 
 
 - `master`: base estable.
 - `develop`: integración del desarrollo actual.
+- `feature`: implementación del flujo conectado de ingresos, gastos, presupuesto y ahorros.
