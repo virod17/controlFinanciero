@@ -6,7 +6,23 @@ import { financeRouter } from './routes/finance.js'
 
 export const app = express()
 
-app.use(cors({ origin: process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173' }))
+const allowedOrigins = (
+  process.env.FRONTEND_ORIGINS ||
+  process.env.FRONTEND_ORIGIN ||
+  'http://localhost:5173'
+)
+  .split(',')
+  .map(origin => origin.trim())
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true)
+    }
+
+    return callback(null, false)
+  },
+}))
 app.use(express.json())
 app.get('/api/health', async (_req, res) => {
   try {

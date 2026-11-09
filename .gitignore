@@ -6,3 +6,4 @@ coverage/
 !.env.example
 .DS_Store
 npm-debug.log*
+frontend/android/local.properties
