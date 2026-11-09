@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
-
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
 const today = new Date()
 const month = ref(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`)
 const activeView = ref('Resumen')
@@ -46,7 +46,7 @@ const formatDate = value => new Intl.DateTimeFormat('es-PA', { day: 'numeric', m
 const transactionCategory = item => item.type === 'income' ? (item.source === 'salary' ? 'Salario' : 'Extra') : (item.category || 'Gasto')
 
 async function api(path, options = {}) {
-  const response = await fetch(`/api${path}`, {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
     headers: { 'Content-Type': 'application/json', ...(options.headers ?? {}) },
   })
