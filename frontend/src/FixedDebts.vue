@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 
 const props = defineProps({
+  defaultAccountId: { type: String, default: null },
   accounts: { type: Array, required: true },
   debts: { type: Array, required: true },
   month: { type: String, required: true },
@@ -10,10 +11,21 @@ const props = defineProps({
   formatMoney: { type: Function, required: true },
   saving: Boolean,
 })
-const emit = defineEmits(['save', 'open-budget'])
+const emit = defineEmits(['save', 'open-budget', 'open-accounts'])
 const contribution = ref(null)
 const payment = ref(null)
 const partial = ref(null)
+const selectedHalf = ref('1')
+const selectedAccount = ref('')
+watch(() => props.defaultAccountId, id => { selectedAccount.value = id ?? '' }, { immediate: true })
+
+function saveDefaultAccount() {
+  emit('save', '/settings', 'PUT', { bankAccountId: selectedAccount.value })
+}
+
+function generateContributions() {
+  emit('save', '/contributions/generate', 'POST', { half: selectedHalf.value })
+}
 const total = computed(() => props.debts.reduce((sum, debt) => sum + debt.amount, 0))
 const lastDay = computed(() => {
   const [year, month] = props.month.split('-').map(Number)
@@ -32,7 +44,8 @@ function editContribution(debt, half) {
   contribution.value = {
     id: debt.id,
     half,
-    bankAccountId: (half === 1 ? debt.firstAccountId : debt.secondAccountId) ?? '',
+    bankAccountId: (half === 1 ? debt.firstAccountId : debt.secondAccountId)
+      ?? ((half === 1 ? debt.firstContribution : debt.secondContribution) ? '' : props.defaultAccountId ?? ''),
     amount: half === 1 ? debt.firstContribution : debt.secondContribution,
   }
 }
@@ -98,6 +111,33 @@ function submitPayment() {
         <small>TOTAL DEL MES</small>
         <strong>{{ formatMoney(total) }}</strong>
       </div>
+    </div>
+
+    <div class="savings-forms">
+      <form class="inline-form" @submit.prevent="saveDefaultAccount">
+        <label class="field-label">Cuenta predeterminada para deudas fijas
+          <select v-model="selectedAccount" required :disabled="saving || !accounts.length">
+            <option value="" disabled>Selecciona una cuenta</option>
+            <option v-for="account in accounts" :key="account.id" :value="account.id">{{ account.name }}</option>
+          </select>
+        </label>
+        <button v-if="accounts.length" class="secondary-button" :disabled="saving || !selectedAccount || selectedAccount === defaultAccountId">
+          Guardar cuenta predeterminada
+        </button>
+        <button v-else class="secondary-button" type="button" @click="emit('open-accounts')">Crear cuenta</button>
+      </form>
+      <form class="inline-form" @submit.prevent="generateContributions">
+        <label class="field-label">Quincena de {{ monthLabel }}
+          <select v-model="selectedHalf" :disabled="saving">
+            <option value="1">Primera quincena</option>
+            <option value="2">Segunda quincena</option>
+          </select>
+        </label>
+        <button class="primary-button" :disabled="saving || !defaultAccountId || selectedAccount !== defaultAccountId || !debts.length">
+          Generar aportes
+        </button>
+        <p class="form-hint">Genera los aportes faltantes hasta el monto disponible de cada cuota. Los pagos se registran por separado.</p>
+      </form>
     </div>
 
     <div v-if="debts.length" class="goal-grid">

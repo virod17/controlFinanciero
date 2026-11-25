@@ -16,6 +16,7 @@ const transactions = ref([])
 const budgetGroups = ref([])
 const savingsGoals = ref([])
 const accounts = ref([])
+const defaultDebtAccountId = ref(null)
 let loadVersion = 0
 const summary = ref({ income: 0, expenses: 0, savingsContributions: 0, available: 0, budgetTotal: 0, savingsTotal: 0, monthlyTrend: [] })
 
@@ -76,12 +77,13 @@ async function loadData() {
   loading.value = true
   errorMessage.value = ''
   try {
-    const [summaryData, transactionData, budgetData, savingsData, accountData] = await Promise.all([
+    const [summaryData, transactionData, budgetData, savingsData, accountData, debtSettings] = await Promise.all([
       api(`/dashboard/summary?month=${selectedMonth}`),
       api(`/transactions?month=${selectedMonth}`),
       api(`/budget?month=${selectedMonth}`),
       api(`/savings?month=${selectedMonth}`),
       api('/accounts'),
+      api('/fixed-debts/settings'),
     ])
     if (version !== loadVersion) return
     summary.value = summaryData
@@ -89,6 +91,7 @@ async function loadData() {
     budgetGroups.value = budgetData.groups
     savingsGoals.value = savingsData.goals
     accounts.value = accountData
+    defaultDebtAccountId.value = debtSettings.bankAccountId
     if (!movementForm.value.savingsGoalId && savingsGoals.value.length) movementForm.value.savingsGoalId = savingsGoals.value[0].id
   } catch (error) {
     if (version === loadVersion) errorMessage.value = error.message
@@ -161,9 +164,13 @@ async function saveFixedDebt(path, method, data, onSuccess) {
     const options = { method }
     if (method === 'DELETE') path += `?month=${selectedMonth}`
     else options.body = JSON.stringify({ ...data, month: selectedMonth })
-    await api(`/fixed-debts${path}`, options)
+    const result = await api(`/fixed-debts${path}`, options)
     onSuccess?.()
-    notify('Deuda actualizada')
+    if (path === '/contributions/generate') {
+      notify(result.generated ? `Aportes generados para ${result.generated} deudas` : 'No hay aportes por generar para esta quincena')
+    } else {
+      notify(path === '/settings' ? 'Cuenta predeterminada guardada' : 'Deuda actualizada')
+    }
     await loadData()
   } catch (error) {
     errorMessage.value = error.message
@@ -424,6 +431,8 @@ async function removeGoal(goal) {
           v-show="!loading"
           :debts="fixedDebts"
           :accounts="accounts"
+          :default-account-id="defaultDebtAccountId"
+          @open-accounts="activeView = 'Cuentas'"
           :month="month"
           :month-label="monthLabel"
           :today="localDate()"

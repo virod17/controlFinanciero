@@ -41,6 +41,13 @@ export const BankAccount = sequelize.define('BankAccount', {
   name: { type: DataTypes.STRING(100), allowNull: false },
 }, { tableName: 'bank_accounts', underscored: true })
 
+export const FixedDebtSettings = sequelize.define('FixedDebtSettings', {
+  id: { type: DataTypes.INTEGER, primaryKey: true },
+  bankAccountId: { type: DataTypes.UUID, allowNull: false },
+}, { tableName: 'fixed_debt_settings', underscored: true })
+
+FixedDebtSettings.belongsTo(BankAccount, { foreignKey: 'bankAccountId', onDelete: 'RESTRICT' })
+
 export const SavingsGoal = sequelize.define('SavingsGoal', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
   name: { type: DataTypes.STRING(100), allowNull: false },

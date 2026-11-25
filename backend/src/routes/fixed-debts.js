@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { Op } from 'sequelize'
 import { z } from 'zod'
 import { sequelize } from '../config/database.js'
-import { BankAccount, DebtPartialPayment, FixedDebt, FixedDebtPlan, FixedDebtPeriod, Transaction } from '../models/index.js'
+import { BankAccount, DebtPartialPayment, FixedDebt, FixedDebtPlan, FixedDebtPeriod, FixedDebtSettings, Transaction } from '../models/index.js'
 import { dateSchema, monthFromQuery, monthSchema, positiveAmount } from './finance-validation.js'
 
 export const fixedDebtsRouter = Router()
@@ -116,6 +116,79 @@ fixedDebtsRouter.get('/', async (req, res, next) => {
   if (!month) return res.status(400).json({ message: 'El mes debe tener formato YYYY-MM.' })
   try {
     return res.json({ month, debts: await getFixedDebts(month) })
+  } catch (error) {
+    return next(error)
+  }
+})
+
+const settingsId = 1
+
+fixedDebtsRouter.get('/settings', async (_req, res, next) => {
+  try {
+    const settings = await FixedDebtSettings.findByPk(settingsId)
+    return res.json({ bankAccountId: settings?.bankAccountId ?? null })
+  } catch (error) {
+    return next(error)
+  }
+})
+
+fixedDebtsRouter.put('/settings', async (req, res, next) => {
+  const data = validate(z.object({ bankAccountId: uuid }), req.body, res)
+  if (!data) return
+  try {
+    if (!await BankAccount.findByPk(data.bankAccountId)) {
+      return res.status(400).json({ message: 'La cuenta seleccionada no existe.' })
+    }
+    await FixedDebtSettings.upsert({ id: settingsId, bankAccountId: data.bankAccountId })
+    return res.status(204).end()
+  } catch (error) {
+    return next(error)
+  }
+})
+
+fixedDebtsRouter.post('/contributions/generate', async (req, res, next) => {
+  const data = validate(z.object({ month: monthStart, half: z.enum(['1', '2']) }), req.body, res)
+  if (!data) return
+  try {
+    const settings = await FixedDebtSettings.findByPk(settingsId)
+    if (!settings) return res.status(400).json({ message: 'Selecciona la cuenta predeterminada para las deudas fijas.' })
+
+    const firstHalf = data.half === '1'
+    const field = firstHalf ? 'firstContribution' : 'secondContribution'
+    const otherField = firstHalf ? 'secondContribution' : 'firstContribution'
+    const accountField = firstHalf ? 'firstAccountId' : 'secondAccountId'
+    const generated = await sequelize.transaction(async transaction => {
+      const debts = await FixedDebt.findAll({
+        where: {
+          startsOn: { [Op.lte]: data.month },
+          [Op.or]: [{ archivedFrom: null }, { archivedFrom: { [Op.gt]: data.month } }],
+        },
+        order: [['id', 'ASC']],
+        lock: transaction.LOCK.UPDATE,
+        transaction,
+      })
+      let count = 0
+      for (const debt of debts) {
+        const where = { fixedDebtId: debt.id, month: data.month }
+        const period = await FixedDebtPeriod.findOne({ where, transaction })
+        if (period?.paymentTransactionId || Number(period?.[field] ?? 0) > 0) continue
+
+        const plan = await findPlan(debt.id, data.month, transaction)
+        const monthly = cents(plan.amount)
+        const first = Math.ceil(monthly / 2)
+        const planned = firstHalf ? first : monthly - first
+        const unallocated = monthly - cents(period?.[otherField] ?? 0)
+        const amount = Math.min(planned, unallocated)
+        if (amount <= 0) continue
+
+        const values = { [field]: amount / 100, [accountField]: settings.bankAccountId }
+        if (period) await period.update(values, { transaction })
+        else await FixedDebtPeriod.create({ ...where, ...values }, { transaction })
+        count++
+      }
+      return count
+    })
+    return res.json({ generated })
   } catch (error) {
     return next(error)
   }
