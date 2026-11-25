@@ -19,11 +19,10 @@ const balances = computed(() => {
   }]))
   const unassigned = { id: null, name: 'Sin cuenta asignada', first: 0, second: 0, savings: 0, goals: [] }
   for (const debt of props.debts) {
-    if (debt.paid) continue
     const first = rows.get(debt.firstAccountId) ?? unassigned
     const second = rows.get(debt.secondAccountId) ?? unassigned
-    first.first += cents(debt.firstContribution)
-    second.second += cents(debt.secondContribution)
+    first.first += cents(debt.firstRemaining)
+    second.second += cents(debt.secondRemaining)
   }
   for (const goal of props.goals) {
     const row = rows.get(goal.bankAccountId) ?? unassigned
@@ -43,7 +42,7 @@ function createAccount() {
     <div class="panel-heading">
       <div>
         <h2>Dinero apartado por cuenta</h2>
-        <p>Aportes de deudas pendientes de {{ monthLabel }} y saldo acumulado de tus metas de ahorro.</p>
+        <p>Saldo de aportes de {{ monthLabel }} después de los pagos y saldo acumulado de tus metas de ahorro.</p>
       </div>
     </div>
     <form class="budget-create-form debt-plan-form" @submit.prevent="createAccount">

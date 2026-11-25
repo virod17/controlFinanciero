@@ -81,6 +81,17 @@ export const FixedDebtPeriod = sequelize.define('FixedDebtPeriod', {
   paymentTransactionId: { type: DataTypes.UUID, allowNull: true, unique: true },
 }, { tableName: 'fixed_debt_periods', underscored: true })
 
+export const DebtPartialPayment = sequelize.define('DebtPartialPayment', {
+  transactionId: { type: DataTypes.UUID, primaryKey: true },
+  fixedDebtId: { type: DataTypes.UUID, allowNull: false },
+  month: { type: DataTypes.DATEONLY, allowNull: false },
+  half: { type: DataTypes.SMALLINT, allowNull: false },
+}, { tableName: 'debt_partial_payments', underscored: true, indexes: [{ fields: ['fixed_debt_id', 'month'] }] })
+
+DebtPartialPayment.belongsTo(FixedDebt, { foreignKey: 'fixedDebtId', onDelete: 'RESTRICT' })
+DebtPartialPayment.belongsTo(Transaction, { foreignKey: 'transactionId', as: 'payment', onDelete: 'RESTRICT' })
+Transaction.hasOne(DebtPartialPayment, { foreignKey: 'transactionId', as: 'debtPartialPayment' })
+
 FixedDebt.hasMany(FixedDebtPlan, { foreignKey: 'fixedDebtId', as: 'plans', onDelete: 'RESTRICT' })
 FixedDebt.hasMany(FixedDebtPeriod, { foreignKey: 'fixedDebtId', as: 'periods', onDelete: 'RESTRICT' })
 FixedDebtPeriod.belongsTo(Transaction, { foreignKey: 'paymentTransactionId', as: 'payment', onDelete: 'RESTRICT' })

@@ -48,8 +48,8 @@ const budgetItems = computed(() => budgetGroups.value.flatMap(group => group.ite
 const recentTransactions = computed(() => transactions.value.slice(0, 6))
 const fixedDebts = computed(() => summary.value.fixedDebts ?? [])
 const pendingDebts = computed(() => fixedDebts.value.filter(debt => !debt.paid))
-const paidDebtTotal = computed(() => fixedDebts.value.reduce((sum, debt) => sum + (debt.paid ? debt.amount : 0), 0))
-const pendingDebtTotal = computed(() => fixedDebts.value.reduce((sum, debt) => sum + (debt.paid ? 0 : debt.amount), 0))
+const paidDebtTotal = computed(() => fixedDebts.value.reduce((sum, debt) => sum + debt.paidAmount, 0))
+const pendingDebtTotal = computed(() => fixedDebts.value.reduce((sum, debt) => sum + debt.remainingDue, 0))
 const monthlySavingsPlanned = computed(() => savingsGoals.value.reduce((sum, goal) => sum + goal.monthlyContribution, 0))
 const formatMoney = value => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0))
 const formatDate = value => new Intl.DateTimeFormat('es-PA', { day: 'numeric', month: 'short' }).format(new Date(`${value}T12:00:00`))
@@ -360,7 +360,7 @@ async function removeGoal(goal) {
                 </div>
                 <div v-for="debt in pendingDebts" :key="debt.id" class="budget-meta">
                   <span class="budget-name"><b>{{ debt.name }}</b></span>
-                  <span class="budget-numbers"><b>{{ formatMoney(debt.amount) }}</b></span>
+                  <span class="budget-numbers"><b>{{ formatMoney(debt.remainingDue) }}</b></span>
                 </div>
                 <div class="budget-meta">
                   <span class="budget-name"><b>Total pendiente</b></span>
