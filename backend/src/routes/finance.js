@@ -5,6 +5,7 @@ import {
   BankAccount,
   BudgetGroup,
   BudgetItem,
+  DebtPartialPayment,
   FixedDebtPeriod,
   MonthlyBudget,
   SavingsGoal,
@@ -14,9 +15,11 @@ import {
 
 import { currentMonth, dateSchema, monthFromQuery, monthRange, monthSchema, positiveAmount } from './finance-validation.js'
 import { fixedDebtsRouter, getFixedDebts } from './fixed-debts.js'
+import { serviceHistoryRouter } from './service-history.js'
 
 export const financeRouter = Router()
 financeRouter.use('/fixed-debts', fixedDebtsRouter)
+financeRouter.use('/service-history', serviceHistoryRouter)
 
 function money(value) {
   return Number(value ?? 0)
@@ -104,7 +107,7 @@ financeRouter.get('/dashboard/summary', async (req, res, next) => {
     const expenseRows = transactions.filter(item => item.type === 'expense')
     const expenses = expenseRows.filter(item => item.paid).reduce((sum, item) => sum + money(item.amount), 0)
     const pendingExpenses = expenseRows.filter(item => !item.paid).reduce((sum, item) => sum + money(item.amount), 0)
-    const reservedForDebts = fixedDebts.filter(debt => !debt.paid).reduce((sum, debt) => sum + debt.reserved, 0)
+    const reservedForDebts = fixedDebts.reduce((sum, debt) => sum + debt.reserved, 0)
     const deposits = savingsMovements.filter(item => item.type === 'deposit').reduce((sum, item) => sum + money(item.amount), 0)
     const withdrawals = savingsMovements.filter(item => item.type === 'withdrawal').reduce((sum, item) => sum + money(item.amount), 0)
     const savingsContributions = deposits - withdrawals
@@ -161,6 +164,7 @@ financeRouter.get('/transactions', async (req, res, next) => {
       include: [
         { model: BudgetItem, as: 'budgetItem', include: [{ model: BudgetGroup, as: 'group' }] },
         { model: FixedDebtPeriod, as: 'fixedDebtPeriod', attributes: ['fixedDebtId'] },
+        { model: DebtPartialPayment, as: 'debtPartialPayment', attributes: ['fixedDebtId'] },
       ],
       order: [['transactionDate', 'DESC'], ['createdAt', 'DESC']],
     })
@@ -168,14 +172,14 @@ financeRouter.get('/transactions', async (req, res, next) => {
       id: row.id,
       type: row.type,
       paid: row.paid,
-      fixedDebtId: row.fixedDebtPeriod?.fixedDebtId ?? null,
+      fixedDebtId: row.fixedDebtPeriod?.fixedDebtId ?? row.debtPartialPayment?.fixedDebtId ?? null,
       amount: money(row.amount),
       description: row.description,
       transactionDate: row.transactionDate,
       source: row.source,
       paymentMethod: row.paymentMethod,
       budgetItemId: row.budgetItemId,
-      category: row.budgetItem?.name ?? (row.fixedDebtPeriod ? 'Deudas fijas' : row.source) ?? 'Sin categoría',
+      category: row.budgetItem?.name ?? ((row.fixedDebtPeriod || row.debtPartialPayment) ? 'Deudas fijas' : row.source) ?? 'Sin categoría',
       group: row.budgetItem?.group?.name ?? null,
     })))
   } catch (error) {
@@ -222,7 +226,7 @@ financeRouter.patch('/transactions/:id/payment', async (req, res, next) => {
   if (!parsed.success) return res.status(400).json({ message: 'Indica un gasto válido y su estado de pago.' })
   try {
     const { id, paid } = parsed.data
-    if (await FixedDebtPeriod.findOne({ where: { paymentTransactionId: id } })) {
+    if (await FixedDebtPeriod.findOne({ where: { paymentTransactionId: id } }) || await DebtPartialPayment.findByPk(id)) {
       return res.status(409).json({ message: 'Cambia este pago desde Deudas fijas.' })
     }
     const [count] = await Transaction.update({ paid }, { where: { id, type: 'expense' } })
@@ -234,7 +238,7 @@ financeRouter.patch('/transactions/:id/payment', async (req, res, next) => {
 
 financeRouter.delete('/transactions/:id', async (req, res, next) => {
   try {
-    if (await FixedDebtPeriod.findOne({ where: { paymentTransactionId: req.params.id } })) {
+    if (await FixedDebtPeriod.findOne({ where: { paymentTransactionId: req.params.id } }) || await DebtPartialPayment.findByPk(req.params.id)) {
       return res.status(409).json({ message: 'Desmarca el pago desde Deudas fijas.' })
     }
     const count = await Transaction.destroy({ where: { id: req.params.id } })
