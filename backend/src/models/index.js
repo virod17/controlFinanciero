@@ -16,6 +16,7 @@ export const BudgetItem = sequelize.define('BudgetItem', {
 export const Transaction = sequelize.define('Transaction', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
   type: { type: DataTypes.ENUM('income', 'expense'), allowNull: false },
+  paid: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
   amount: { type: DataTypes.DECIMAL(12, 2), allowNull: false, validate: { min: 0.01 } },
   description: { type: DataTypes.STRING(180), allowNull: false },
   transactionDate: { type: DataTypes.DATEONLY, allowNull: false, field: 'transaction_date' },
@@ -35,9 +36,15 @@ export const MonthlyBudget = sequelize.define('MonthlyBudget', {
   indexes: [{ unique: true, fields: ['month', 'budget_item_id'] }],
 })
 
+export const BankAccount = sequelize.define('BankAccount', {
+  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  name: { type: DataTypes.STRING(100), allowNull: false },
+}, { tableName: 'bank_accounts', underscored: true })
+
 export const SavingsGoal = sequelize.define('SavingsGoal', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
   name: { type: DataTypes.STRING(100), allowNull: false },
+  bankAccountId: { type: DataTypes.UUID, allowNull: true },
   targetAmount: { type: DataTypes.DECIMAL(12, 2), allowNull: true, field: 'target_amount' },
   monthlyContribution: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0, field: 'monthly_contribution' },
 }, { tableName: 'savings_goals', underscored: true })
@@ -51,6 +58,34 @@ export const SavingsMovement = sequelize.define('SavingsMovement', {
   savingsGoalId: { type: DataTypes.UUID, allowNull: false, field: 'savings_goal_id' },
 }, { tableName: 'savings_movements', underscored: true, indexes: [{ fields: ['movement_date'] }] })
 
+export const FixedDebt = sequelize.define('FixedDebt', {
+  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  startsOn: { type: DataTypes.DATEONLY, allowNull: false },
+  archivedFrom: { type: DataTypes.DATEONLY, allowNull: true },
+}, { tableName: 'fixed_debts', underscored: true })
+
+export const FixedDebtPlan = sequelize.define('FixedDebtPlan', {
+  fixedDebtId: { type: DataTypes.UUID, primaryKey: true },
+  effectiveMonth: { type: DataTypes.DATEONLY, primaryKey: true },
+  name: { type: DataTypes.STRING(100), allowNull: false },
+  amount: { type: DataTypes.DECIMAL(12, 2), allowNull: false },
+}, { tableName: 'fixed_debt_plans', underscored: true })
+
+export const FixedDebtPeriod = sequelize.define('FixedDebtPeriod', {
+  fixedDebtId: { type: DataTypes.UUID, primaryKey: true },
+  month: { type: DataTypes.DATEONLY, primaryKey: true },
+  firstContribution: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
+  secondContribution: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
+  firstAccountId: { type: DataTypes.UUID, allowNull: true },
+  secondAccountId: { type: DataTypes.UUID, allowNull: true },
+  paymentTransactionId: { type: DataTypes.UUID, allowNull: true, unique: true },
+}, { tableName: 'fixed_debt_periods', underscored: true })
+
+FixedDebt.hasMany(FixedDebtPlan, { foreignKey: 'fixedDebtId', as: 'plans', onDelete: 'RESTRICT' })
+FixedDebt.hasMany(FixedDebtPeriod, { foreignKey: 'fixedDebtId', as: 'periods', onDelete: 'RESTRICT' })
+FixedDebtPeriod.belongsTo(Transaction, { foreignKey: 'paymentTransactionId', as: 'payment', onDelete: 'RESTRICT' })
+Transaction.hasOne(FixedDebtPeriod, { foreignKey: 'paymentTransactionId', as: 'fixedDebtPeriod' })
+
 BudgetGroup.hasMany(BudgetItem, { foreignKey: 'groupId', as: 'items', onDelete: 'CASCADE' })
 BudgetItem.belongsTo(BudgetGroup, { foreignKey: 'groupId', as: 'group' })
 BudgetItem.hasMany(Transaction, { foreignKey: 'budgetItemId', as: 'transactions', onDelete: 'SET NULL' })
@@ -59,3 +94,7 @@ BudgetItem.hasMany(MonthlyBudget, { foreignKey: 'budgetItemId', as: 'monthlyBudg
 MonthlyBudget.belongsTo(BudgetItem, { foreignKey: 'budgetItemId', as: 'budgetItem' })
 SavingsGoal.hasMany(SavingsMovement, { foreignKey: 'savingsGoalId', as: 'movements', onDelete: 'CASCADE' })
 SavingsMovement.belongsTo(SavingsGoal, { foreignKey: 'savingsGoalId', as: 'goal' })
+
+SavingsGoal.belongsTo(BankAccount, { foreignKey: 'bankAccountId', as: 'bankAccount', onDelete: 'RESTRICT' })
+FixedDebtPeriod.belongsTo(BankAccount, { foreignKey: 'firstAccountId', as: 'firstAccount', onDelete: 'RESTRICT' })
+FixedDebtPeriod.belongsTo(BankAccount, { foreignKey: 'secondAccountId', as: 'secondAccount', onDelete: 'RESTRICT' })
