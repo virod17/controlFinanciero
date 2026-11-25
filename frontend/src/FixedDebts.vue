@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 
 const props = defineProps({
+  defaultAccountId: { type: String, default: null },
   accounts: { type: Array, required: true },
   debts: { type: Array, required: true },
   month: { type: String, required: true },
@@ -10,9 +11,21 @@ const props = defineProps({
   formatMoney: { type: Function, required: true },
   saving: Boolean,
 })
-const emit = defineEmits(['save', 'open-budget'])
+const emit = defineEmits(['save', 'open-budget', 'open-accounts'])
 const contribution = ref(null)
 const payment = ref(null)
+const partial = ref(null)
+const selectedHalf = ref('1')
+const selectedAccount = ref('')
+watch(() => props.defaultAccountId, id => { selectedAccount.value = id ?? '' }, { immediate: true })
+
+function saveDefaultAccount() {
+  emit('save', '/settings', 'PUT', { bankAccountId: selectedAccount.value })
+}
+
+function generateContributions() {
+  emit('save', '/contributions/generate', 'POST', { half: selectedHalf.value })
+}
 const total = computed(() => props.debts.reduce((sum, debt) => sum + debt.amount, 0))
 const lastDay = computed(() => {
   const [year, month] = props.month.split('-').map(Number)
@@ -22,14 +35,17 @@ const lastDay = computed(() => {
 watch(() => props.month, () => {
   contribution.value = null
   payment.value = null
+  partial.value = null
 })
 
 function editContribution(debt, half) {
+  partial.value = null
   payment.value = null
   contribution.value = {
     id: debt.id,
     half,
-    bankAccountId: (half === 1 ? debt.firstAccountId : debt.secondAccountId) ?? '',
+    bankAccountId: (half === 1 ? debt.firstAccountId : debt.secondAccountId)
+      ?? ((half === 1 ? debt.firstContribution : debt.secondContribution) ? '' : props.defaultAccountId ?? ''),
     amount: half === 1 ? debt.firstContribution : debt.secondContribution,
   }
 }
@@ -39,7 +55,32 @@ function submitContribution() {
   emit('save', `/${id}/contributions/${half}`, 'PUT', { amount, bankAccountId: bankAccountId || null }, () => { contribution.value = null })
 }
 
+function defaultPaymentDate() {
+  return props.today.startsWith(props.month) ? props.today : `${props.month}-${lastDay.value}`
+}
+
+function openPartial(debt, half) {
+  contribution.value = null
+  payment.value = null
+  const available = half === 1 ? debt.firstRemaining : debt.secondRemaining
+  partial.value = {
+    id: debt.id, half, paymentId: crypto.randomUUID(), amount: '',
+    maxAmount: Math.min(available, debt.remainingDue), paymentDate: defaultPaymentDate(),
+  }
+}
+
+function submitPartial() {
+  const { id, half, paymentId, amount, paymentDate } = partial.value
+  emit('save', `/${id}/partial-payments/${paymentId}`, 'PUT', { amount, paymentDate, half: String(half) }, () => { partial.value = null })
+}
+
+function removePartial(debt, entry) {
+  if (!window.confirm(`¿Quitar el pago de ${props.formatMoney(entry.amount)}? El importe vuelve a quedar apartado.`)) return
+  emit('save', `/${debt.id}/partial-payments/${entry.id}`, 'DELETE', {})
+}
+
 function changePayment(debt) {
+  partial.value = null
   if (debt.paid) {
     emit('save', `/${debt.id}/payment`, 'PUT', { paid: false })
     return
@@ -47,7 +88,7 @@ function changePayment(debt) {
   contribution.value = null
   payment.value = {
     id: debt.id,
-    paymentDate: props.today.startsWith(props.month) ? props.today : `${props.month}-${lastDay.value}`,
+    paymentDate: defaultPaymentDate(),
   }
 }
 
@@ -72,6 +113,33 @@ function submitPayment() {
       </div>
     </div>
 
+    <div class="savings-forms">
+      <form class="inline-form" @submit.prevent="saveDefaultAccount">
+        <label class="field-label">Cuenta predeterminada para deudas fijas
+          <select v-model="selectedAccount" required :disabled="saving || !accounts.length">
+            <option value="" disabled>Selecciona una cuenta</option>
+            <option v-for="account in accounts" :key="account.id" :value="account.id">{{ account.name }}</option>
+          </select>
+        </label>
+        <button v-if="accounts.length" class="secondary-button" :disabled="saving || !selectedAccount || selectedAccount === defaultAccountId">
+          Guardar cuenta predeterminada
+        </button>
+        <button v-else class="secondary-button" type="button" @click="emit('open-accounts')">Crear cuenta</button>
+      </form>
+      <form class="inline-form" @submit.prevent="generateContributions">
+        <label class="field-label">Quincena de {{ monthLabel }}
+          <select v-model="selectedHalf" :disabled="saving">
+            <option value="1">Primera quincena</option>
+            <option value="2">Segunda quincena</option>
+          </select>
+        </label>
+        <button class="primary-button" :disabled="saving || !defaultAccountId || selectedAccount !== defaultAccountId || !debts.length">
+          Generar aportes
+        </button>
+        <p class="form-hint">Genera los aportes faltantes hasta el monto disponible de cada cuota. Los pagos se registran por separado.</p>
+      </form>
+    </div>
+
     <div v-if="debts.length" class="goal-grid">
       <article v-for="debt in debts" :key="debt.id" class="goal-card">
         <h3>{{ debt.name }}</h3>
@@ -80,7 +148,8 @@ function submitPayment() {
           <div><dt>Aporte 1.ª quincena</dt><dd>{{ formatMoney(debt.firstContribution) }}</dd></div>
           <div><dt>Aporte 2.ª quincena</dt><dd>{{ formatMoney(debt.secondContribution) }}</dd></div>
           <div><dt>Total apartado</dt><dd>{{ formatMoney(debt.reserved) }}</dd></div>
-          <div v-if="!debt.paid"><dt>Por apartar</dt><dd>{{ formatMoney(Math.max(0, debt.amount - debt.reserved)) }}</dd></div>
+          <div><dt>Pagado</dt><dd>{{ formatMoney(debt.paidAmount) }}</dd></div>
+          <div><dt>Pendiente por pagar</dt><dd>{{ formatMoney(debt.remainingDue) }}</dd></div>
         </dl>
 
         <form v-if="contribution?.id === debt.id" class="inline-form" @submit.prevent="submitContribution">
@@ -99,21 +168,43 @@ function submitPayment() {
           </div>
         </form>
         <div v-else class="inline-actions debt-actions">
-          <button class="small-action" :disabled="saving" @click="editContribution(debt, 1)">Aporte 1.ª quincena</button>
-          <button class="small-action" :disabled="saving" @click="editContribution(debt, 2)">Aporte 2.ª quincena</button>
+          <button class="small-action" :disabled="saving || debt.hasFinalPayment" @click="editContribution(debt, 1)">Aporte 1.ª quincena</button>
+          <button class="small-action" :disabled="saving || debt.hasFinalPayment" @click="editContribution(debt, 2)">Aporte 2.ª quincena</button>
+        </div>
+
+        <div v-if="!debt.paid" class="inline-actions debt-actions">
+          <button class="small-action" :disabled="saving || !debt.firstRemaining" @click="openPartial(debt, 1)">Pagar con 1.ª quincena</button>
+          <button class="small-action" :disabled="saving || !debt.secondRemaining" @click="openPartial(debt, 2)">Pagar con 2.ª quincena</button>
+        </div>
+        <form v-if="partial?.id === debt.id" class="inline-form" @submit.prevent="submitPartial">
+          <label class="field-label">Monto a descontar del aporte de la quincena {{ partial.half }}
+            <input v-model.number="partial.amount" type="number" min="0.01" :max="partial.maxAmount" step="0.01" required>
+          </label>
+          <label class="field-label">Fecha del pago
+            <input v-model="partial.paymentDate" type="date" :min="`${month}-01`" :max="`${month}-${lastDay}`" required>
+          </label>
+          <div class="inline-actions debt-actions">
+            <button class="primary-button" :disabled="saving">Registrar pago</button>
+            <button class="secondary-button" type="button" @click="partial = null">Cancelar</button>
+          </div>
+        </form>
+        <div v-for="entry in debt.partialPayments" :key="entry.id" class="inline-actions debt-actions">
+          <small>{{ entry.date }} · Quincena {{ entry.half }} · {{ formatMoney(entry.amount) }}</small>
+          <button v-if="!debt.hasFinalPayment" class="small-action" :disabled="saving" @click="removePartial(debt, entry)">Quitar pago</button>
         </div>
 
         <form v-if="payment?.id === debt.id" class="inline-form" @submit.prevent="submitPayment">
+          <p>Se usa primero lo apartado en la 1.ª quincena y luego en la 2.ª.</p>
           <label class="field-label">Fecha de pago
             <input v-model="payment.paymentDate" type="date" :min="`${month}-01`" :max="`${month}-${lastDay}`" required>
           </label>
           <div class="inline-actions debt-actions">
-            <button class="primary-button" :disabled="saving">Confirmar pago</button>
+            <button class="primary-button" :disabled="saving">Pagar {{ formatMoney(debt.remainingDue) }}</button>
             <button class="secondary-button" type="button" @click="payment = null">Cancelar</button>
           </div>
         </form>
         <label v-else class="payment-check debt-payment">
-          <input type="checkbox" :checked="debt.paid" :disabled="saving" @click.prevent="changePayment(debt)">
+          <input type="checkbox" :checked="debt.paid" :disabled="saving || (debt.paid && !debt.hasFinalPayment)" @click.prevent="changePayment(debt)">
           Pagada <small v-if="debt.paymentDate">· {{ debt.paymentDate }}</small>
         </label>
 

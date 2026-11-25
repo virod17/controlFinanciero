@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import Accounts from './Accounts.vue'
+import ServiceHistory from './ServiceHistory.vue'
 import FixedDebts from './FixedDebts.vue'
 import FixedDebtBudget from './FixedDebtBudget.vue'
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
@@ -16,6 +17,7 @@ const transactions = ref([])
 const budgetGroups = ref([])
 const savingsGoals = ref([])
 const accounts = ref([])
+const defaultDebtAccountId = ref(null)
 let loadVersion = 0
 const summary = ref({ income: 0, expenses: 0, savingsContributions: 0, available: 0, budgetTotal: 0, savingsTotal: 0, monthlyTrend: [] })
 
@@ -26,6 +28,7 @@ const navItems = [
   { name: 'Deudas fijas', icon: '▣' },
   { name: 'Ahorros', icon: '◉' },
   { name: 'Cuentas', icon: '▣' },
+  { name: 'Servicios y visitas', icon: '▤' },
 ]
 
 const transactionForm = ref({ type: 'expense', description: '', amount: '', transactionDate: localDate(), source: 'salary', paid: false, budgetItemId: '' })
@@ -48,8 +51,8 @@ const budgetItems = computed(() => budgetGroups.value.flatMap(group => group.ite
 const recentTransactions = computed(() => transactions.value.slice(0, 6))
 const fixedDebts = computed(() => summary.value.fixedDebts ?? [])
 const pendingDebts = computed(() => fixedDebts.value.filter(debt => !debt.paid))
-const paidDebtTotal = computed(() => fixedDebts.value.reduce((sum, debt) => sum + (debt.paid ? debt.amount : 0), 0))
-const pendingDebtTotal = computed(() => fixedDebts.value.reduce((sum, debt) => sum + (debt.paid ? 0 : debt.amount), 0))
+const paidDebtTotal = computed(() => fixedDebts.value.reduce((sum, debt) => sum + debt.paidAmount, 0))
+const pendingDebtTotal = computed(() => fixedDebts.value.reduce((sum, debt) => sum + debt.remainingDue, 0))
 const monthlySavingsPlanned = computed(() => savingsGoals.value.reduce((sum, goal) => sum + goal.monthlyContribution, 0))
 const formatMoney = value => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0))
 const formatDate = value => new Intl.DateTimeFormat('es-PA', { day: 'numeric', month: 'short' }).format(new Date(`${value}T12:00:00`))
@@ -62,7 +65,11 @@ async function api(path, options = {}) {
   })
   if (response.status === 204) return null
   const data = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(data.message || 'No se pudo completar la solicitud.')
+  if (!response.ok) {
+    const error = new Error(data.message || 'No se pudo completar la solicitud.')
+    error.status = response.status
+    throw error
+  }
   return data
 }
 
@@ -76,12 +83,13 @@ async function loadData() {
   loading.value = true
   errorMessage.value = ''
   try {
-    const [summaryData, transactionData, budgetData, savingsData, accountData] = await Promise.all([
+    const [summaryData, transactionData, budgetData, savingsData, accountData, debtSettings] = await Promise.all([
       api(`/dashboard/summary?month=${selectedMonth}`),
       api(`/transactions?month=${selectedMonth}`),
       api(`/budget?month=${selectedMonth}`),
       api(`/savings?month=${selectedMonth}`),
       api('/accounts'),
+      api('/fixed-debts/settings'),
     ])
     if (version !== loadVersion) return
     summary.value = summaryData
@@ -89,6 +97,7 @@ async function loadData() {
     budgetGroups.value = budgetData.groups
     savingsGoals.value = savingsData.goals
     accounts.value = accountData
+    defaultDebtAccountId.value = debtSettings.bankAccountId
     if (!movementForm.value.savingsGoalId && savingsGoals.value.length) movementForm.value.savingsGoalId = savingsGoals.value[0].id
   } catch (error) {
     if (version === loadVersion) errorMessage.value = error.message
@@ -161,9 +170,13 @@ async function saveFixedDebt(path, method, data, onSuccess) {
     const options = { method }
     if (method === 'DELETE') path += `?month=${selectedMonth}`
     else options.body = JSON.stringify({ ...data, month: selectedMonth })
-    await api(`/fixed-debts${path}`, options)
+    const result = await api(`/fixed-debts${path}`, options)
     onSuccess?.()
-    notify('Deuda actualizada')
+    if (path === '/contributions/generate') {
+      notify(result.generated ? `Aportes generados para ${result.generated} deudas` : 'No hay aportes por generar para esta quincena')
+    } else {
+      notify(path === '/settings' ? 'Cuenta predeterminada guardada' : 'Deuda actualizada')
+    }
     await loadData()
   } catch (error) {
     errorMessage.value = error.message
@@ -310,12 +323,12 @@ async function removeGoal(goal) {
       <header class="topbar"><div class="breadcrumb">Finanzas <span>/</span> <b>{{ activeView }}</b></div><span class="connection-state"><i></i> Conectado a PostgreSQL</span></header>
       <div class="page-content">
         <section class="page-heading">
-          <div><div class="eyebrow">TU DINERO, MÁS CLARO</div><h1>{{ activeView === 'Resumen' ? 'Tu panorama financiero' : activeView }}</h1><p v-if="activeView === 'Resumen'">Ingresos, gastos y ahorros de un vistazo.</p></div>
-          <div class="heading-actions"><label class="month-select">▦ <input v-model="month" type="month" :aria-label="`Mes seleccionado: ${monthLabel}`" /></label><button class="primary-button" @click="openTransaction('expense')"><span>＋</span> Agregar movimiento</button></div>
+          <div><div class="eyebrow">TU DINERO, MÁS CLARO</div><h1>{{ activeView === 'Resumen' ? 'Tu panorama financiero' : activeView }}</h1><p v-if="activeView === 'Resumen'">Ingresos, gastos y ahorros de un vistazo.</p><p v-else-if="activeView === 'Servicios y visitas'">Mantenimientos, consultas y exámenes</p></div>
+          <div v-if="activeView !== 'Servicios y visitas'" class="heading-actions"><label class="month-select">▦ <input v-model="month" type="month" :aria-label="`Mes seleccionado: ${monthLabel}`" /></label><button class="primary-button" @click="openTransaction('expense')"><span>＋</span> Agregar movimiento</button></div>
         </section>
 
-        <div v-if="errorMessage" class="error-banner" role="alert"><span>{{ errorMessage }}</span><button @click="loadData">Reintentar</button></div>
-        <div v-if="loading" class="loading-card">Cargando tus datos financieros…</div>
+        <div v-if="errorMessage && activeView !== 'Servicios y visitas'" class="error-banner" role="alert"><span>{{ errorMessage }}</span><button @click="loadData">Reintentar</button></div>
+        <div v-if="loading && activeView !== 'Servicios y visitas'" class="loading-card">Cargando tus datos financieros…</div>
 
         <template v-else-if="activeView === 'Resumen'">
           <section class="summary-grid">
@@ -360,7 +373,7 @@ async function removeGoal(goal) {
                 </div>
                 <div v-for="debt in pendingDebts" :key="debt.id" class="budget-meta">
                   <span class="budget-name"><b>{{ debt.name }}</b></span>
-                  <span class="budget-numbers"><b>{{ formatMoney(debt.amount) }}</b></span>
+                  <span class="budget-numbers"><b>{{ formatMoney(debt.remainingDue) }}</b></span>
                 </div>
                 <div class="budget-meta">
                   <span class="budget-name"><b>Total pendiente</b></span>
@@ -407,6 +420,13 @@ async function removeGoal(goal) {
           </article>
         </section>
 
+        <ServiceHistory
+          v-if="activeView === 'Servicios y visitas'"
+          :request="api"
+          :format-money="formatMoney"
+          :today="localDate()"
+        />
+
         <Accounts
           v-if="activeView === 'Cuentas'"
           v-show="!loading"
@@ -424,6 +444,8 @@ async function removeGoal(goal) {
           v-show="!loading"
           :debts="fixedDebts"
           :accounts="accounts"
+          :default-account-id="defaultDebtAccountId"
+          @open-accounts="activeView = 'Cuentas'"
           :month="month"
           :month-label="monthLabel"
           :today="localDate()"

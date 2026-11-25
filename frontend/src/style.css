@@ -109,3 +109,62 @@
 .pending-debt-list .budget-meta {
   padding: 5px 0;
 }
+
+.history-layout {
+  display: grid;
+  grid-template-columns: minmax(230px, 1fr) minmax(0, 1.6fr);
+  align-items: start;
+  gap: 14px;
+}
+
+.history-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 145px), 1fr));
+  gap: 10px;
+}
+
+.history-layout textarea {
+  resize: vertical;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #e2e8e2;
+  border-radius: 8px;
+  font: inherit;
+}
+
+.history-list {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.history-list li {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.history-list header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.history-list small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+.history-notes {
+  white-space: pre-wrap;
+}
+
+@media (max-width: 760px) {
+  .history-layout {
+    grid-template-columns: 1fr;
+  }
+}
