@@ -6,3 +6,77 @@
 @media(max-width:1100px){.sidebar{width:210px}.main-area{margin-left:210px}.page-content{padding:27px 24px}.topbar{padding:0 24px}.summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.budget-create-form{grid-template-columns:1fr 1fr .8fr 55px}.budget-create-form .primary-button{grid-column:1/-1}.content-grid,.lower-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:760px){.sidebar{position:static;width:auto;height:auto;padding:13px 15px;border-right:0;border-bottom:1px solid var(--line)}.brand{padding:0 2px;font-size:19px}.brand-mark{width:30px;height:30px}.workspace-label,.sidebar-bottom{display:none}.nav-list{display:flex;overflow:auto;margin-top:13px;gap:4px}.nav-item{white-space:nowrap;padding:9px 10px;font-size:11px;gap:7px}.nav-icon{font-size:14px;width:16px}.main-area{margin-left:0}.topbar{height:48px;padding:0 16px}.page-content{padding:22px 14px 35px}.page-heading{align-items:flex-start;flex-direction:column;margin-bottom:17px}.page-heading h1{font-size:21px}.heading-actions{width:100%}.month-select{flex:1}.month-select input{width:100%;min-width:0}.heading-actions>.primary-button{white-space:nowrap;padding:10px}.summary-grid{gap:9px}.summary-card{padding:14px;min-height:114px}.summary-value{font-size:20px}.card-label{font-size:8px}.card-foot{font-size:9px}.content-grid,.lower-grid{grid-template-columns:1fr;gap:11px;margin-top:11px}.panel{padding:16px}.table-head,.transaction-row{grid-template-columns:minmax(0,1fr) 88px 78px;gap:5px}.movement-page .transaction-row{grid-template-columns:minmax(0,1fr) 92px 82px 26px}.movement-page .table-head{grid-template-columns:minmax(0,1fr) 92px 82px 26px}.category-pill{font-size:8px;padding:4px 5px}.transaction-title b{font-size:9px}.transaction-amount{font-size:9px}.budget-create-form{grid-template-columns:1fr 1fr}.budget-create-form .primary-button{grid-column:1/-1}.savings-forms{grid-template-columns:1fr}.full-panel>.panel-heading{align-items:flex-start}.savings-total-card{min-width:130px}.goal-grid{grid-template-columns:1fr 1fr}.connection-state{font-size:0}.connection-state i{width:8px;height:8px}.inline-actions{gap:6px}.inline-actions button{padding:9px;font-size:10px}}
 @media(max-width:420px){.summary-grid{grid-template-columns:1fr 1fr}.summary-value{font-size:17px}.page-heading h1{font-size:19px}.heading-actions>.primary-button{font-size:10px;padding:9px}.month-select{font-size:10px;padding:0 7px}.month-select input{font-size:10px}.table-head,.transaction-row{grid-template-columns:minmax(0,1fr) 70px 70px}.movement-page .transaction-row{grid-template-columns:minmax(0,1fr) 70px 70px 24px}.movement-page .table-head{grid-template-columns:minmax(0,1fr) 70px 70px 24px}.goal-grid{grid-template-columns:1fr}.panel-heading h2{font-size:13px}}
+
+.payment-check {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  font-size: .85rem;
+}
+
+.payment-check input {
+  accent-color: #3b806f;
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+}
+
+.transaction-actions,
+.debt-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .4rem;
+}
+
+.debt-plan-form {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+}
+
+.debt-amounts {
+  margin: .75rem 0;
+  font-size: .85rem;
+}
+
+.debt-amounts div {
+  display: flex;
+  justify-content: space-between;
+  gap: .5rem;
+}
+
+.debt-amounts dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.debt-payment {
+  margin: .75rem 0;
+}
+
+.movement-page .table-head,
+.movement-page .transaction-row {
+  grid-template-columns: minmax(0, 1fr) minmax(75px, 150px) minmax(65px, 100px) 132px;
+}
+
+.movement-page .transaction-actions {
+  justify-content: flex-end;
+}
+
+@media (max-width: 760px) {
+  .movement-page .table-head,
+  .movement-page .transaction-row {
+    grid-template-columns: minmax(0, 1fr) minmax(70px, 92px) minmax(60px, 82px);
+  }
+
+  .movement-page .transaction-row {
+    padding: .55rem 0;
+  }
+
+  .movement-page .transaction-actions {
+    grid-column: 1 / -1;
+  }
+
+  .fixed-debts-panel .goal-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+  }
+}

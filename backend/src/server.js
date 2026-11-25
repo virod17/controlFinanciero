@@ -9,6 +9,9 @@ async function start() {
   try {
     await sequelize.authenticate()
     await sequelize.sync()
+    // Existing expenses were already deducted before payment status was introduced.
+    await sequelize.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS paid BOOLEAN NOT NULL DEFAULT TRUE')
+    await sequelize.query('ALTER TABLE transactions ALTER COLUMN paid SET DEFAULT FALSE')
 
     const starterGroups = [
       { name: 'Deudas fijas', color: '#ed8c70', items: ['Préstamo'] },

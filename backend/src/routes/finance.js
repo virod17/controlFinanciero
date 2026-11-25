@@ -4,37 +4,18 @@ import { z } from 'zod'
 import {
   BudgetGroup,
   BudgetItem,
+  FixedDebtPeriod,
   MonthlyBudget,
   SavingsGoal,
   SavingsMovement,
   Transaction,
 } from '../models/index.js'
 
+import { currentMonth, dateSchema, monthFromQuery, monthRange, monthSchema, positiveAmount } from './finance-validation.js'
+import { fixedDebtsRouter, getFixedDebts } from './fixed-debts.js'
+
 export const financeRouter = Router()
-
-const monthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/)
-const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
-const positiveAmount = z.coerce.number().finite().positive().max(9999999999.99)
-
-function currentMonth() {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Panama', year: 'numeric', month: '2-digit',
-  }).formatToParts(new Date())
-  const year = parts.find(part => part.type === 'year').value
-  const month = parts.find(part => part.type === 'month').value
-  return `${year}-${month}`
-}
-
-function monthRange(month) {
-  const [year, monthNumber] = month.split('-').map(Number)
-  const next = new Date(Date.UTC(year, monthNumber, 1)).toISOString().slice(0, 10)
-  return { first: `${month}-01`, next }
-}
-
-function monthFromQuery(query) {
-  const result = monthSchema.safeParse(query.month ?? currentMonth())
-  return result.success ? result.data : null
-}
+financeRouter.use('/fixed-debts', fixedDebtsRouter)
 
 function money(value) {
   return Number(value ?? 0)
@@ -49,6 +30,7 @@ async function getBudgetGroups(month) {
     Transaction.findAll({
       where: {
         type: 'expense',
+        paid: true,
         transactionDate: { [Op.gte]: first, [Op.lt]: next },
         budgetItemId: { [Op.ne]: null },
       },
@@ -108,15 +90,19 @@ financeRouter.get('/dashboard/summary', async (req, res, next) => {
 
   try {
     const { first, next: nextMonth } = monthRange(month)
-    const [transactions, savingsMovements, budgetGroups, savingsGoals] = await Promise.all([
+    const [transactions, savingsMovements, budgetGroups, savingsGoals, fixedDebts] = await Promise.all([
       Transaction.findAll({ where: { transactionDate: { [Op.gte]: first, [Op.lt]: nextMonth } } }),
       SavingsMovement.findAll({ where: { movementDate: { [Op.gte]: first, [Op.lt]: nextMonth } } }),
       getBudgetGroups(month),
       getSavingsGoals(month),
+      getFixedDebts(month),
     ])
 
     const income = transactions.filter(item => item.type === 'income').reduce((sum, item) => sum + money(item.amount), 0)
-    const expenses = transactions.filter(item => item.type === 'expense').reduce((sum, item) => sum + money(item.amount), 0)
+    const expenseRows = transactions.filter(item => item.type === 'expense')
+    const expenses = expenseRows.filter(item => item.paid).reduce((sum, item) => sum + money(item.amount), 0)
+    const pendingExpenses = expenseRows.filter(item => !item.paid).reduce((sum, item) => sum + money(item.amount), 0)
+    const reservedForDebts = fixedDebts.filter(debt => !debt.paid).reduce((sum, debt) => sum + debt.reserved, 0)
     const deposits = savingsMovements.filter(item => item.type === 'deposit').reduce((sum, item) => sum + money(item.amount), 0)
     const withdrawals = savingsMovements.filter(item => item.type === 'withdrawal').reduce((sum, item) => sum + money(item.amount), 0)
     const savingsContributions = deposits - withdrawals
@@ -127,7 +113,7 @@ financeRouter.get('/dashboard/summary', async (req, res, next) => {
     const trendStartDate = trendStart.toISOString().slice(0, 10)
     const trendTransactions = await Transaction.findAll({
       where: { transactionDate: { [Op.gte]: trendStartDate, [Op.lt]: nextMonth } },
-      attributes: ['type', 'amount', 'transactionDate'],
+      attributes: ['type', 'amount', 'transactionDate', 'paid'],
     })
     const trendMap = new Map()
     for (let offset = 5; offset >= 0; offset -= 1) {
@@ -137,6 +123,7 @@ financeRouter.get('/dashboard/summary', async (req, res, next) => {
       trendMap.set(key, { month: key, label: label[0].toUpperCase() + label.slice(1), income: 0, expenses: 0 })
     }
     for (const transaction of trendTransactions) {
+      if (transaction.type === 'expense' && !transaction.paid) continue
       const point = trendMap.get(transaction.transactionDate.slice(0, 7))
       if (point) point[transaction.type === 'income' ? 'income' : 'expenses'] += money(transaction.amount)
     }
@@ -146,6 +133,9 @@ financeRouter.get('/dashboard/summary', async (req, res, next) => {
       currency: 'USD',
       income,
       expenses,
+      pendingExpenses,
+      reservedForDebts,
+      fixedDebts,
       savingsContributions,
       available: income - expenses,
       budgetTotal,
@@ -166,19 +156,24 @@ financeRouter.get('/transactions', async (req, res, next) => {
     const { first, next: nextMonth } = monthRange(month)
     const rows = await Transaction.findAll({
       where: { transactionDate: { [Op.gte]: first, [Op.lt]: nextMonth } },
-      include: [{ model: BudgetItem, as: 'budgetItem', include: [{ model: BudgetGroup, as: 'group' }] }],
+      include: [
+        { model: BudgetItem, as: 'budgetItem', include: [{ model: BudgetGroup, as: 'group' }] },
+        { model: FixedDebtPeriod, as: 'fixedDebtPeriod', attributes: ['fixedDebtId'] },
+      ],
       order: [['transactionDate', 'DESC'], ['createdAt', 'DESC']],
     })
     return res.json(rows.map(row => ({
       id: row.id,
       type: row.type,
+      paid: row.paid,
+      fixedDebtId: row.fixedDebtPeriod?.fixedDebtId ?? null,
       amount: money(row.amount),
       description: row.description,
       transactionDate: row.transactionDate,
       source: row.source,
       paymentMethod: row.paymentMethod,
       budgetItemId: row.budgetItemId,
-      category: row.budgetItem?.name ?? row.source ?? 'Sin categoría',
+      category: row.budgetItem?.name ?? (row.fixedDebtPeriod ? 'Deudas fijas' : row.source) ?? 'Sin categoría',
       group: row.budgetItem?.group?.name ?? null,
     })))
   } catch (error) {
@@ -189,6 +184,7 @@ financeRouter.get('/transactions', async (req, res, next) => {
 financeRouter.post('/transactions', async (req, res, next) => {
   const schema = z.object({
     type: z.enum(['income', 'expense']),
+    paid: z.boolean().default(false),
     amount: positiveAmount,
     description: z.string().trim().min(1).max(180),
     transactionDate: dateSchema,
@@ -207,6 +203,7 @@ financeRouter.post('/transactions', async (req, res, next) => {
     }
     const created = await Transaction.create({
       ...data,
+      paid: data.type === 'income' || data.paid,
       source: data.type === 'income' ? data.source : null,
       budgetItemId: data.type === 'expense' ? data.budgetItemId : null,
     })
@@ -216,8 +213,28 @@ financeRouter.post('/transactions', async (req, res, next) => {
   }
 })
 
+financeRouter.patch('/transactions/:id/payment', async (req, res, next) => {
+  const parsed = z.object({ id: z.string().uuid(), paid: z.boolean() }).safeParse({
+    id: req.params.id, paid: req.body?.paid,
+  })
+  if (!parsed.success) return res.status(400).json({ message: 'Indica un gasto válido y su estado de pago.' })
+  try {
+    const { id, paid } = parsed.data
+    if (await FixedDebtPeriod.findOne({ where: { paymentTransactionId: id } })) {
+      return res.status(409).json({ message: 'Cambia este pago desde Deudas fijas.' })
+    }
+    const [count] = await Transaction.update({ paid }, { where: { id, type: 'expense' } })
+    return count ? res.json({ id, paid }) : res.status(404).json({ message: 'Gasto no encontrado.' })
+  } catch (error) {
+    return next(error)
+  }
+})
+
 financeRouter.delete('/transactions/:id', async (req, res, next) => {
   try {
+    if (await FixedDebtPeriod.findOne({ where: { paymentTransactionId: req.params.id } })) {
+      return res.status(409).json({ message: 'Desmarca el pago desde Deudas fijas.' })
+    }
     const count = await Transaction.destroy({ where: { id: req.params.id } })
     return count ? res.status(204).end() : res.status(404).json({ message: 'Movimiento no encontrado.' })
   } catch (error) {
