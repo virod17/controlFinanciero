@@ -10,7 +10,6 @@ const props = defineProps({
   saving: Boolean,
 })
 const emit = defineEmits(['save'])
-const plan = ref({ id: null, name: '', amount: '' })
 const contribution = ref(null)
 const payment = ref(null)
 const total = computed(() => props.debts.reduce((sum, debt) => sum + debt.amount, 0))
@@ -19,17 +18,7 @@ const lastDay = computed(() => {
   return new Date(Date.UTC(year, month, 0)).getUTCDate()
 })
 
-function submitPlan() {
-  const { id, name, amount } = plan.value
-  emit('save', id ? `/${id}` : '', id ? 'PUT' : 'POST', { name, amount }, resetPlan)
-}
-
-function resetPlan() {
-  plan.value = { id: null, name: '', amount: '' }
-}
-
 watch(() => props.month, () => {
-  resetPlan()
   contribution.value = null
   payment.value = null
 })
@@ -65,12 +54,6 @@ function submitPayment() {
   emit('save', `/${id}/payment`, 'PUT', { paid: true, paymentDate }, () => { payment.value = null })
 }
 
-function archive(debt) {
-  if (!window.confirm(`¿Archivar “${debt.name}” desde ${props.monthLabel}? Se conservarán los aportes y pagos registrados.`)) return
-  emit('save', `/${debt.id}`, 'DELETE', {}, () => {
-    if (plan.value.id === debt.id) resetPlan()
-  })
-}
 </script>
 
 <template>
@@ -85,18 +68,6 @@ function archive(debt) {
         <strong>{{ formatMoney(total) }}</strong>
       </div>
     </div>
-
-    <form class="budget-create-form debt-plan-form" @submit.prevent="submitPlan">
-      <label class="field-label">Nombre
-        <input v-model="plan.name" placeholder="Ej. Renta" maxlength="100" required>
-      </label>
-      <label class="field-label">Monto mensual
-        <input v-model.number="plan.amount" type="number" min="0.01" max="9999999999.99" step="0.01" required>
-      </label>
-      <button class="primary-button" :disabled="saving">{{ plan.id ? 'Guardar cambios' : 'Agregar deuda' }}</button>
-      <button v-if="plan.id" class="secondary-button" type="button" @click="resetPlan">Cancelar edición</button>
-    </form>
-    <p v-if="plan.id" class="muted-note">El cambio se aplica desde {{ monthLabel }} y respeta los pagos registrados.</p>
 
     <div v-if="debts.length" class="goal-grid">
       <article v-for="debt in debts" :key="debt.id" class="goal-card">
@@ -137,12 +108,8 @@ function archive(debt) {
           Pagada <small v-if="debt.paymentDate">· {{ debt.paymentDate }}</small>
         </label>
 
-        <div v-if="!debt.archived" class="inline-actions debt-actions">
-          <button class="small-action" :disabled="saving" @click="plan = { id: debt.id, name: debt.plannedName, amount: debt.plannedAmount }">Editar deuda</button>
-          <button class="small-action" :disabled="saving" @click="archive(debt)">Archivar</button>
-        </div>
       </article>
     </div>
-    <div v-else class="empty-state">Agrega una deuda fija para organizar sus aportes quincenales.</div>
+    <div v-else class="empty-state">Agrega una cuota mensual en Presupuesto para empezar a registrar aportes y pagos.</div>
   </section>
 </template>

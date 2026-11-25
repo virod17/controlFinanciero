@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import FixedDebts from './FixedDebts.vue'
+import FixedDebtBudget from './FixedDebtBudget.vue'
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
 const today = new Date()
 const month = ref(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`)
@@ -25,7 +26,7 @@ const navItems = [
 ]
 
 const transactionForm = ref({ type: 'expense', description: '', amount: '', transactionDate: localDate(), source: 'salary', paid: false, budgetItemId: '' })
-const budgetForm = ref({ groupName: 'Deudas fijas', name: '', plannedAmount: 0, color: '#ed8c70' })
+const budgetForm = ref({ groupName: '', name: '', plannedAmount: 0, color: '#ed8c70' })
 const goalForm = ref({ name: '', targetAmount: '', monthlyContribution: 0 })
 const movementForm = ref({ savingsGoalId: '', type: 'deposit', amount: '', movementDate: localDate(), note: '' })
 
@@ -42,8 +43,9 @@ const monthLabel = computed(() => {
 })
 const budgetItems = computed(() => budgetGroups.value.flatMap(group => group.items.map(item => ({ ...item, group: group.name, color: group.color }))))
 const recentTransactions = computed(() => transactions.value.slice(0, 6))
-const budgetPlannedTotal = computed(() => budgetItems.value.reduce((sum, item) => sum + item.planned, 0))
-const budgetSpentTotal = computed(() => budgetItems.value.reduce((sum, item) => sum + item.spent, 0))
+const fixedDebts = computed(() => summary.value.fixedDebts ?? [])
+const paidDebtTotal = computed(() => fixedDebts.value.reduce((sum, debt) => sum + (debt.paid ? debt.amount : 0), 0))
+const pendingDebtTotal = computed(() => fixedDebts.value.reduce((sum, debt) => sum + (debt.paid ? 0 : debt.amount), 0))
 const monthlySavingsPlanned = computed(() => savingsGoals.value.reduce((sum, goal) => sum + goal.monthlyContribution, 0))
 const formatMoney = value => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0))
 const formatDate = value => new Intl.DateTimeFormat('es-PA', { day: 'numeric', month: 'short' }).format(new Date(`${value}T12:00:00`))
@@ -291,7 +293,25 @@ async function removeGoal(goal) {
               <div v-if="summary.monthlyTrend?.some(point => point.income || point.expenses)" class="bar-chart"><div class="chart-y"><span>{{ formatMoney(Math.max(1, ...summary.monthlyTrend.map(point => Math.max(point.income, point.expenses)))) }}</span><span>$0</span></div><div class="chart-area"><div class="grid-line line-1"></div><div class="grid-line line-2"></div><div v-for="point in summary.monthlyTrend" :key="point.month" class="bar-group"><div class="bars"><span class="bar income-bar" :style="{ height: `${Math.max(point.income ? 4 : 0, point.income / Math.max(1, ...summary.monthlyTrend.map(p => Math.max(p.income, p.expenses))) * 100)}%` }" :title="`Ingresos ${formatMoney(point.income)}`"></span><span class="bar expense-bar" :style="{ height: `${Math.max(point.expenses ? 4 : 0, point.expenses / Math.max(1, ...summary.monthlyTrend.map(p => Math.max(p.income, p.expenses))) * 100)}%` }" :title="`Gastos ${formatMoney(point.expenses)}`"></span></div><span class="month-label">{{ point.label }}</span></div></div></div>
               <div v-else class="empty-chart">Registra ingresos y gastos para ver tu gráfica mensual.</div>
             </article>
-            <article class="panel budget-panel"><div class="panel-heading"><div><h2>Presupuesto</h2><p>Plan frente a gastos de {{ monthLabel }}</p></div><button class="text-link" @click="activeView = 'Presupuesto'">Administrar →</button></div><div class="budget-overview"><div><small>GASTADO</small><strong>{{ formatMoney(budgetSpentTotal) }}</strong></div><div class="budget-total"><small>PRESUPUESTO</small><strong>{{ formatMoney(budgetPlannedTotal) }}</strong></div></div><div class="progress-track overall"><span :style="{ width: `${budgetPlannedTotal ? Math.min(budgetSpentTotal / budgetPlannedTotal * 100, 100) : 0}%` }"></span></div><div v-if="budgetItems.length" class="budget-list"><div v-for="item in budgetItems.slice(0, 4)" :key="item.id" class="budget-row"><div class="budget-meta"><span class="budget-icon" :style="{ background: `${item.color}22`, color: item.color }">•</span><span class="budget-name"><b>{{ item.name }}</b><small>{{ item.group }}</small></span><span class="budget-numbers"><b>{{ formatMoney(item.spent) }}</b><small>de {{ formatMoney(item.planned) }}</small></span></div><div class="progress-track"><span :style="{ width: `${item.planned ? Math.min(item.spent / item.planned * 100, 100) : 0}%`, background: item.color }"></span></div></div></div><div v-else class="empty-state compact">Aún no tienes conceptos presupuestarios.</div></article>
+            <article class="panel">
+              <div class="panel-heading">
+                <div><h2>Deudas fijas</h2><p>Estado de {{ monthLabel }}</p></div>
+                <button class="text-link" @click="activeView = 'Deudas fijas'">Ver todas →</button>
+              </div>
+              <template v-if="fixedDebts.length">
+                <div class="budget-overview">
+                  <div><small>PAGADO</small><strong>{{ formatMoney(paidDebtTotal) }}</strong></div>
+                  <div class="budget-total"><small>PENDIENTE</small><strong>{{ formatMoney(pendingDebtTotal) }}</strong></div>
+                </div>
+                <div class="budget-list">
+                  <div v-for="debt in fixedDebts" :key="debt.id" class="budget-meta">
+                    <span class="budget-name"><b>{{ debt.name }}</b><small>{{ debt.paid ? 'Pagada' : 'Pendiente' }}</small></span>
+                    <span class="budget-numbers"><b>{{ formatMoney(debt.amount) }}</b><small>{{ formatMoney(debt.reserved) }} apartados</small></span>
+                  </div>
+                </div>
+              </template>
+              <div v-else class="empty-state compact">Agrega tus cuotas mensuales en Presupuesto.</div>
+            </article>
           </section>
 
           <section class="lower-grid">
@@ -309,11 +329,19 @@ async function removeGoal(goal) {
           <button v-else class="icon-action" aria-label="Eliminar movimiento" :disabled="saving" @click="deleteTransaction(item)">×</button>
         </div></div></div><div v-else class="empty-state">No hay movimientos en este mes.</div></section>
 
-        <section v-else-if="activeView === 'Presupuesto'" class="budget-page">
-          <article class="panel full-panel"><div class="panel-heading"><div><h2>Presupuesto de {{ monthLabel }}</h2><p>Organiza tus límites por grupo y concepto.</p></div><button class="text-link" @click="activeView = 'Deudas fijas'">Ver deudas fijas →</button></div><div class="budget-create-form"><label class="field-label">Sección o grupo<input v-model="budgetForm.groupName" placeholder="Ej. Deudas fijas" required maxlength="80"></label><label class="field-label">Concepto<input v-model="budgetForm.name" placeholder="Ej. Préstamo del auto" required maxlength="100"></label><label class="field-label">Límite mensual<input v-model.number="budgetForm.plannedAmount" type="number" min="0" step="0.01" required></label><label class="field-label color-field">Color<input v-model="budgetForm.color" type="color"></label><button class="primary-button" :disabled="saving" @click="saveBudgetItem">Agregar concepto</button></div><div v-if="budgetGroups.length" class="group-list"><section v-for="group in budgetGroups" :key="group.id" class="budget-group"><div class="group-heading"><span class="group-dot" :style="{ background: group.color }"></span><h3>{{ group.name }}</h3></div><div v-if="group.items.length" class="budget-list expanded"><div v-for="item in group.items" :key="item.id" class="budget-row"><div class="budget-meta"><span class="budget-name"><b>{{ item.name }}</b><small>Quedan {{ formatMoney(Math.max(0, item.planned - item.spent)) }}</small></span><span class="budget-numbers"><b>{{ formatMoney(item.spent) }}</b><small>de {{ formatMoney(item.planned) }}</small></span><button class="small-action" @click="updatePlannedAmount(item)">Editar límite</button><button class="icon-action" aria-label="Eliminar concepto" @click="removeBudgetItem(item)">×</button></div><div class="progress-track"><span :style="{ width: `${item.planned ? Math.min(item.spent / item.planned * 100, 100) : 0}%`, background: group.color }"></span></div></div></div><p v-else class="muted-note">Sin conceptos en esta sección.</p></section></div><div v-else class="empty-state">Agrega una sección y un concepto para empezar a presupuestar.</div></article>
+        <section v-if="activeView === 'Presupuesto'" v-show="!loading" class="budget-page">
+          <FixedDebtBudget
+            :debts="fixedDebts"
+            :month="month"
+            :month-label="monthLabel"
+            :format-money="formatMoney"
+            :saving="saving"
+            @save="saveFixedDebt"
+          />
+          <article class="panel full-panel"><div class="panel-heading"><div><h2>Otros gastos previstos</h2><p>Organiza tus límites de {{ monthLabel }} por grupo y concepto.</p></div><button class="text-link" @click="activeView = 'Deudas fijas'">Ver deudas fijas →</button></div><div class="budget-create-form"><label class="field-label">Sección o grupo<input v-model="budgetForm.groupName" placeholder="Ej. Transporte" required maxlength="80"></label><label class="field-label">Concepto<input v-model="budgetForm.name" placeholder="Ej. Gasolina" required maxlength="100"></label><label class="field-label">Límite mensual<input v-model.number="budgetForm.plannedAmount" type="number" min="0" step="0.01" required></label><label class="field-label color-field">Color<input v-model="budgetForm.color" type="color"></label><button class="primary-button" :disabled="saving" @click="saveBudgetItem">Agregar concepto</button></div><div v-if="budgetGroups.length" class="group-list"><section v-for="group in budgetGroups" :key="group.id" class="budget-group"><div class="group-heading"><span class="group-dot" :style="{ background: group.color }"></span><h3>{{ group.name }}</h3></div><div v-if="group.items.length" class="budget-list expanded"><div v-for="item in group.items" :key="item.id" class="budget-row"><div class="budget-meta"><span class="budget-name"><b>{{ item.name }}</b><small>Quedan {{ formatMoney(Math.max(0, item.planned - item.spent)) }}</small></span><span class="budget-numbers"><b>{{ formatMoney(item.spent) }}</b><small>de {{ formatMoney(item.planned) }}</small></span><button class="small-action" @click="updatePlannedAmount(item)">Editar límite</button><button class="icon-action" aria-label="Eliminar concepto" @click="removeBudgetItem(item)">×</button></div><div class="progress-track"><span :style="{ width: `${item.planned ? Math.min(item.spent / item.planned * 100, 100) : 0}%`, background: group.color }"></span></div></div></div><p v-else class="muted-note">Sin conceptos en esta sección.</p></section></div><div v-else class="empty-state">Agrega una sección y un concepto para empezar a presupuestar.</div></article>
         </section>
 
-        <section v-else-if="activeView === 'Ahorros'" class="savings-page">
+        <section v-if="!loading && activeView === 'Ahorros'" class="savings-page">
           <article class="panel full-panel"><div class="panel-heading"><div><h2>Ahorros acumulados</h2><p>Consulta el saldo y los aportes por meta de ahorro.</p></div><div class="savings-total-card"><small>TOTAL AHORRADO</small><strong>{{ formatMoney(summary.savingsTotal) }}</strong></div></div>
             <div class="savings-forms"><form class="inline-form" @submit.prevent="saveGoal"><h3>Crear meta</h3><label class="field-label">Nombre<input v-model="goalForm.name" placeholder="Fondo de emergencia" required maxlength="100"></label><label class="field-label">Monto objetivo<input v-model="goalForm.targetAmount" type="number" min="0.01" step="0.01" placeholder="Opcional"></label><label class="field-label">Aporte mensual planeado<input v-model="goalForm.monthlyContribution" type="number" min="0" step="0.01"></label><button class="primary-button" :disabled="saving">Crear meta</button></form>
               <form class="inline-form" @submit.prevent="saveMovement"><h3>Registrar movimiento de ahorro</h3><label class="field-label">Meta<select v-model="movementForm.savingsGoalId" required><option value="" disabled>Selecciona una meta</option><option v-for="goal in savingsGoals" :key="goal.id" :value="goal.id">{{ goal.name }}</option></select></label><label class="field-label">Movimiento<select v-model="movementForm.type"><option value="deposit">Aporte</option><option value="withdrawal">Retiro</option></select></label><label class="field-label">Monto<input v-model="movementForm.amount" type="number" min="0.01" step="0.01" required></label><label class="field-label">Fecha<input v-model="movementForm.movementDate" type="date" required></label><button class="primary-button" :disabled="saving || !savingsGoals.length">Guardar movimiento</button></form></div>
@@ -324,7 +352,7 @@ async function removeGoal(goal) {
         <FixedDebts
           v-if="activeView === 'Deudas fijas' && month"
           v-show="!loading"
-          :debts="summary.fixedDebts ?? []"
+          :debts="fixedDebts"
           :month="month"
           :month-label="monthLabel"
           :today="localDate()"
