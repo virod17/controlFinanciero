@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import Accounts from './Accounts.vue'
+import ServiceHistory from './ServiceHistory.vue'
 import FixedDebts from './FixedDebts.vue'
 import FixedDebtBudget from './FixedDebtBudget.vue'
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
@@ -27,6 +28,7 @@ const navItems = [
   { name: 'Deudas fijas', icon: '▣' },
   { name: 'Ahorros', icon: '◉' },
   { name: 'Cuentas', icon: '▣' },
+  { name: 'Historial', icon: '▤' },
 ]
 
 const transactionForm = ref({ type: 'expense', description: '', amount: '', transactionDate: localDate(), source: 'salary', paid: false, budgetItemId: '' })
@@ -63,7 +65,11 @@ async function api(path, options = {}) {
   })
   if (response.status === 204) return null
   const data = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(data.message || 'No se pudo completar la solicitud.')
+  if (!response.ok) {
+    const error = new Error(data.message || 'No se pudo completar la solicitud.')
+    error.status = response.status
+    throw error
+  }
   return data
 }
 
@@ -318,11 +324,11 @@ async function removeGoal(goal) {
       <div class="page-content">
         <section class="page-heading">
           <div><div class="eyebrow">TU DINERO, MÁS CLARO</div><h1>{{ activeView === 'Resumen' ? 'Tu panorama financiero' : activeView }}</h1><p v-if="activeView === 'Resumen'">Ingresos, gastos y ahorros de un vistazo.</p></div>
-          <div class="heading-actions"><label class="month-select">▦ <input v-model="month" type="month" :aria-label="`Mes seleccionado: ${monthLabel}`" /></label><button class="primary-button" @click="openTransaction('expense')"><span>＋</span> Agregar movimiento</button></div>
+          <div v-if="activeView !== 'Historial'" class="heading-actions"><label class="month-select">▦ <input v-model="month" type="month" :aria-label="`Mes seleccionado: ${monthLabel}`" /></label><button class="primary-button" @click="openTransaction('expense')"><span>＋</span> Agregar movimiento</button></div>
         </section>
 
-        <div v-if="errorMessage" class="error-banner" role="alert"><span>{{ errorMessage }}</span><button @click="loadData">Reintentar</button></div>
-        <div v-if="loading" class="loading-card">Cargando tus datos financieros…</div>
+        <div v-if="errorMessage && activeView !== 'Historial'" class="error-banner" role="alert"><span>{{ errorMessage }}</span><button @click="loadData">Reintentar</button></div>
+        <div v-if="loading && activeView !== 'Historial'" class="loading-card">Cargando tus datos financieros…</div>
 
         <template v-else-if="activeView === 'Resumen'">
           <section class="summary-grid">
@@ -413,6 +419,13 @@ async function removeGoal(goal) {
             </label><p>{{ goal.targetAmount ? `Meta de ${formatMoney(goal.targetAmount)}` : 'Sin monto objetivo' }}</p><div v-if="goal.targetAmount" class="progress-track"><span :style="{ width: `${Math.min(goal.balance / goal.targetAmount * 100, 100)}%` }"></span></div><div class="goal-bottom"><b>{{ formatMoney(goal.balance) }}</b><small>+ {{ formatMoney(goal.contributedThisMonth) }} en {{ monthLabel }}</small></div></article></div><div v-else class="empty-state">Todavía no tienes metas de ahorro. Crea una para comenzar a acumular.</div>
           </article>
         </section>
+
+        <ServiceHistory
+          v-if="activeView === 'Historial'"
+          :request="api"
+          :format-money="formatMoney"
+          :today="localDate()"
+        />
 
         <Accounts
           v-if="activeView === 'Cuentas'"

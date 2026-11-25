@@ -116,3 +116,17 @@ SavingsMovement.belongsTo(SavingsGoal, { foreignKey: 'savingsGoalId', as: 'goal'
 SavingsGoal.belongsTo(BankAccount, { foreignKey: 'bankAccountId', as: 'bankAccount', onDelete: 'RESTRICT' })
 FixedDebtPeriod.belongsTo(BankAccount, { foreignKey: 'firstAccountId', as: 'firstAccount', onDelete: 'RESTRICT' })
 FixedDebtPeriod.belongsTo(BankAccount, { foreignKey: 'secondAccountId', as: 'secondAccount', onDelete: 'RESTRICT' })
+
+export const ServiceRecord = sequelize.define('ServiceRecord', {
+  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  category: { type: DataTypes.STRING(24), allowNull: false },
+  subject: { type: DataTypes.STRING(120), allowNull: false },
+  serviceDate: { type: DataTypes.DATEONLY, allowNull: false },
+  place: { type: DataTypes.STRING(160), allowNull: false },
+  amount: { type: DataTypes.DECIMAL(12, 2), allowNull: true },
+  notes: { type: DataTypes.TEXT, allowNull: false, defaultValue: '' },
+}, {
+  tableName: 'service_records',
+  underscored: true,
+  indexes: [{ fields: ['service_date'] }],
+})

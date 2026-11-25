@@ -15,9 +15,11 @@ import {
 
 import { currentMonth, dateSchema, monthFromQuery, monthRange, monthSchema, positiveAmount } from './finance-validation.js'
 import { fixedDebtsRouter, getFixedDebts } from './fixed-debts.js'
+import { serviceHistoryRouter } from './service-history.js'
 
 export const financeRouter = Router()
 financeRouter.use('/fixed-debts', fixedDebtsRouter)
+financeRouter.use('/service-history', serviceHistoryRouter)
 
 function money(value) {
   return Number(value ?? 0)
