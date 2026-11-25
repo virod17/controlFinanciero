@@ -28,7 +28,7 @@ const navItems = [
   { name: 'Deudas fijas', icon: '▣' },
   { name: 'Ahorros', icon: '◉' },
   { name: 'Cuentas', icon: '▣' },
-  { name: 'Historial', icon: '▤' },
+  { name: 'Servicios y visitas', icon: '▤' },
 ]
 
 const transactionForm = ref({ type: 'expense', description: '', amount: '', transactionDate: localDate(), source: 'salary', paid: false, budgetItemId: '' })
@@ -323,12 +323,12 @@ async function removeGoal(goal) {
       <header class="topbar"><div class="breadcrumb">Finanzas <span>/</span> <b>{{ activeView }}</b></div><span class="connection-state"><i></i> Conectado a PostgreSQL</span></header>
       <div class="page-content">
         <section class="page-heading">
-          <div><div class="eyebrow">TU DINERO, MÁS CLARO</div><h1>{{ activeView === 'Resumen' ? 'Tu panorama financiero' : activeView }}</h1><p v-if="activeView === 'Resumen'">Ingresos, gastos y ahorros de un vistazo.</p></div>
-          <div v-if="activeView !== 'Historial'" class="heading-actions"><label class="month-select">▦ <input v-model="month" type="month" :aria-label="`Mes seleccionado: ${monthLabel}`" /></label><button class="primary-button" @click="openTransaction('expense')"><span>＋</span> Agregar movimiento</button></div>
+          <div><div class="eyebrow">TU DINERO, MÁS CLARO</div><h1>{{ activeView === 'Resumen' ? 'Tu panorama financiero' : activeView }}</h1><p v-if="activeView === 'Resumen'">Ingresos, gastos y ahorros de un vistazo.</p><p v-else-if="activeView === 'Servicios y visitas'">Mantenimientos, consultas y exámenes</p></div>
+          <div v-if="activeView !== 'Servicios y visitas'" class="heading-actions"><label class="month-select">▦ <input v-model="month" type="month" :aria-label="`Mes seleccionado: ${monthLabel}`" /></label><button class="primary-button" @click="openTransaction('expense')"><span>＋</span> Agregar movimiento</button></div>
         </section>
 
-        <div v-if="errorMessage && activeView !== 'Historial'" class="error-banner" role="alert"><span>{{ errorMessage }}</span><button @click="loadData">Reintentar</button></div>
-        <div v-if="loading && activeView !== 'Historial'" class="loading-card">Cargando tus datos financieros…</div>
+        <div v-if="errorMessage && activeView !== 'Servicios y visitas'" class="error-banner" role="alert"><span>{{ errorMessage }}</span><button @click="loadData">Reintentar</button></div>
+        <div v-if="loading && activeView !== 'Servicios y visitas'" class="loading-card">Cargando tus datos financieros…</div>
 
         <template v-else-if="activeView === 'Resumen'">
           <section class="summary-grid">
@@ -421,7 +421,7 @@ async function removeGoal(goal) {
         </section>
 
         <ServiceHistory
-          v-if="activeView === 'Historial'"
+          v-if="activeView === 'Servicios y visitas'"
           :request="api"
           :format-money="formatMoney"
           :today="localDate()"

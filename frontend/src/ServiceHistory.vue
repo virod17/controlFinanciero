@@ -8,15 +8,13 @@ const props = defineProps({
 })
 
 const categories = {
-  car: { label: 'Mantenimiento de auto', subject: 'Vehículo', example: 'Changan UNI-T' },
-  dentist: { label: 'Dentista', subject: 'Persona', example: 'Nombre de la persona' },
-  ac: { label: 'Mantenimiento de aire acondicionado', subject: 'Equipo', example: 'Aire de la sala' },
-  vet: { label: 'Visita al veterinario', subject: 'Mascota', example: 'Nombre de la mascota' },
-  exam: { label: 'Examen', subject: 'Persona o mascota', example: 'Nombre de la persona o mascota' },
+  maintenance: { label: 'Mantenimientos', subject: 'Vehículo o equipo', example: 'Changan UNI-T o aire de la sala' },
+  exam: { label: 'Exámenes', subject: 'Persona o mascota', example: 'Nombre de la persona o mascota' },
+  medical: { label: 'Visitas médicas', subject: 'Persona o mascota', example: 'Nombre de la persona o mascota' },
 }
 
 function blankRecord() {
-  return { id: null, category: 'car', subject: '', serviceDate: props.today, place: '', amount: '', notes: '' }
+  return { id: null, category: 'maintenance', subject: '', serviceDate: props.today, place: '', amount: '', notes: '' }
 }
 
 const records = ref([])
@@ -122,11 +120,11 @@ function formatDate(date) {
 <template>
   <section v-if="locked" class="panel">
     <form class="inline-form" @submit.prevent="loadRecords">
-      <label class="field-label">Clave del historial
+      <label class="field-label">Clave de Servicios y visitas
         <input v-model="historyKey" type="password" autocomplete="off" required>
       </label>
       <p v-if="error" class="error-banner" role="alert">{{ error }}</p>
-      <button class="primary-button" :disabled="loading">Abrir historial</button>
+      <button class="primary-button" :disabled="loading">Abrir Servicios y visitas</button>
     </form>
   </section>
   <section v-else class="history-layout">

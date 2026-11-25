@@ -12,17 +12,25 @@ serviceHistoryRouter.use((req, res, next) => {
   const key = process.env.SERVICE_HISTORY_KEY
   res.set('Cache-Control', 'no-store')
   if (!key && process.env.NODE_ENV !== 'production') return next()
-  if (!key) return res.status(503).json({ message: 'Configura SERVICE_HISTORY_KEY en el backend para habilitar Historial.' })
+  if (!key) return res.status(503).json({ message: 'Configura SERVICE_HISTORY_KEY en el backend para habilitar Servicios y visitas.' })
 
   const provided = req.get('X-Service-History-Key') ?? ''
   if (!timingSafeEqual(digest(provided), digest(key))) {
-    return res.status(401).json({ message: 'Ingresa una clave válida para abrir Historial.' })
+    return res.status(401).json({ message: 'Ingresa una clave válida para abrir Servicios y visitas.' })
   }
   return next()
 })
 
+const legacyCategories = { car: 'maintenance', ac: 'maintenance', dentist: 'medical', vet: 'medical' }
+
+function serializeRecord(record) {
+  const data = record.toJSON()
+  return { ...data, category: legacyCategories[data.category] ?? data.category }
+}
+
 const recordSchema = z.object({
-  category: z.enum(['car', 'dentist', 'ac', 'vet', 'exam']),
+  category: z.enum(['maintenance', 'exam', 'medical', 'car', 'ac', 'dentist', 'vet'])
+    .transform(category => legacyCategories[category] ?? category),
   subject: z.string().trim().min(1).max(120),
   serviceDate: dateSchema,
   place: z.string().trim().min(1).max(160),
@@ -47,7 +55,7 @@ serviceHistoryRouter.param('id', async (req, res, next, id) => {
 serviceHistoryRouter.get('/', async (_req, res, next) => {
   try {
     const records = await ServiceRecord.findAll({ order: [['serviceDate', 'DESC'], ['createdAt', 'DESC'], ['id', 'ASC']] })
-    return res.json(records)
+    return res.json(records.map(serializeRecord))
   } catch (error) {
     return next(error)
   }
