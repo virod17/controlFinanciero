@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 
 const props = defineProps({
+  accounts: { type: Array, required: true },
   debts: { type: Array, required: true },
   month: { type: String, required: true },
   monthLabel: { type: String, required: true },
@@ -28,13 +29,14 @@ function editContribution(debt, half) {
   contribution.value = {
     id: debt.id,
     half,
+    bankAccountId: (half === 1 ? debt.firstAccountId : debt.secondAccountId) ?? '',
     amount: half === 1 ? debt.firstContribution : debt.secondContribution,
   }
 }
 
 function submitContribution() {
-  const { id, half, amount } = contribution.value
-  emit('save', `/${id}/contributions/${half}`, 'PUT', { amount }, () => { contribution.value = null })
+  const { id, half, amount, bankAccountId } = contribution.value
+  emit('save', `/${id}/contributions/${half}`, 'PUT', { amount, bankAccountId: bankAccountId || null }, () => { contribution.value = null })
 }
 
 function changePayment(debt) {
@@ -84,6 +86,12 @@ function submitPayment() {
         <form v-if="contribution?.id === debt.id" class="inline-form" @submit.prevent="submitContribution">
           <label class="field-label">{{ contribution.half === 1 ? 'Aporte de la primera quincena' : 'Aporte de la segunda quincena' }}
             <input v-model.number="contribution.amount" type="number" min="0" max="9999999999.99" step="0.01" required>
+          </label>
+          <label class="field-label">Cuenta donde apartaste el aporte
+            <select v-model="contribution.bankAccountId">
+              <option value="">Sin cuenta asignada</option>
+              <option v-for="account in accounts" :key="account.id" :value="account.id">{{ account.name }}</option>
+            </select>
           </label>
           <div class="inline-actions debt-actions">
             <button class="primary-button" :disabled="saving">Guardar aporte</button>

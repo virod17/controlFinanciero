@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { Op } from 'sequelize'
 import { z } from 'zod'
 import {
+  BankAccount,
   BudgetGroup,
   BudgetItem,
   FixedDebtPeriod,
@@ -78,6 +79,7 @@ async function getSavingsGoals(month) {
       name: goal.name,
       targetAmount: goal.targetAmount === null ? null : money(goal.targetAmount),
       monthlyContribution: money(goal.monthlyContribution),
+      bankAccountId: goal.bankAccountId,
       balance,
       contributedThisMonth,
     }
@@ -311,6 +313,41 @@ financeRouter.delete('/budget/items/:id', async (req, res, next) => {
   try {
     const count = await BudgetItem.destroy({ where: { id: req.params.id } })
     return count ? res.status(204).end() : res.status(404).json({ message: 'Concepto de presupuesto no encontrado.' })
+  } catch (error) {
+    return next(error)
+  }
+})
+
+financeRouter.get('/accounts', async (_req, res, next) => {
+  try {
+    return res.json(await BankAccount.findAll({ order: [['name', 'ASC']] }))
+  } catch (error) {
+    return next(error)
+  }
+})
+
+financeRouter.post('/accounts', async (req, res, next) => {
+  const parsed = z.object({ name: z.string().trim().min(1).max(100) }).safeParse(req.body)
+  if (!parsed.success) return res.status(400).json({ message: 'Indica un nombre válido para la cuenta.' })
+  try {
+    return res.status(201).json(await BankAccount.create(parsed.data))
+  } catch (error) {
+    return next(error)
+  }
+})
+
+financeRouter.patch('/savings/goals/:id/account', async (req, res, next) => {
+  const parsed = z.object({ id: z.string().uuid(), bankAccountId: z.string().uuid().nullable() }).safeParse({
+    id: req.params.id, bankAccountId: req.body?.bankAccountId,
+  })
+  if (!parsed.success) return res.status(400).json({ message: 'Selecciona una meta y una cuenta válidas.' })
+  try {
+    const { id, bankAccountId } = parsed.data
+    if (bankAccountId && !await BankAccount.findByPk(bankAccountId)) {
+      return res.status(400).json({ message: 'La cuenta seleccionada no existe.' })
+    }
+    const [count] = await SavingsGoal.update({ bankAccountId }, { where: { id } })
+    return count ? res.status(204).end() : res.status(404).json({ message: 'Meta de ahorro no encontrada.' })
   } catch (error) {
     return next(error)
   }

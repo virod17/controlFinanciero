@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
+import Accounts from './Accounts.vue'
 import FixedDebts from './FixedDebts.vue'
 import FixedDebtBudget from './FixedDebtBudget.vue'
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
@@ -14,6 +15,7 @@ const showTransactionModal = ref(false)
 const transactions = ref([])
 const budgetGroups = ref([])
 const savingsGoals = ref([])
+const accounts = ref([])
 let loadVersion = 0
 const summary = ref({ income: 0, expenses: 0, savingsContributions: 0, available: 0, budgetTotal: 0, savingsTotal: 0, monthlyTrend: [] })
 
@@ -23,6 +25,7 @@ const navItems = [
   { name: 'Presupuesto', icon: '▤' },
   { name: 'Deudas fijas', icon: '▣' },
   { name: 'Ahorros', icon: '◉' },
+  { name: 'Cuentas', icon: '▣' },
 ]
 
 const transactionForm = ref({ type: 'expense', description: '', amount: '', transactionDate: localDate(), source: 'salary', paid: false, budgetItemId: '' })
@@ -44,6 +47,7 @@ const monthLabel = computed(() => {
 const budgetItems = computed(() => budgetGroups.value.flatMap(group => group.items.map(item => ({ ...item, group: group.name, color: group.color }))))
 const recentTransactions = computed(() => transactions.value.slice(0, 6))
 const fixedDebts = computed(() => summary.value.fixedDebts ?? [])
+const pendingDebts = computed(() => fixedDebts.value.filter(debt => !debt.paid))
 const paidDebtTotal = computed(() => fixedDebts.value.reduce((sum, debt) => sum + (debt.paid ? debt.amount : 0), 0))
 const pendingDebtTotal = computed(() => fixedDebts.value.reduce((sum, debt) => sum + (debt.paid ? 0 : debt.amount), 0))
 const monthlySavingsPlanned = computed(() => savingsGoals.value.reduce((sum, goal) => sum + goal.monthlyContribution, 0))
@@ -72,17 +76,19 @@ async function loadData() {
   loading.value = true
   errorMessage.value = ''
   try {
-    const [summaryData, transactionData, budgetData, savingsData] = await Promise.all([
+    const [summaryData, transactionData, budgetData, savingsData, accountData] = await Promise.all([
       api(`/dashboard/summary?month=${selectedMonth}`),
       api(`/transactions?month=${selectedMonth}`),
       api(`/budget?month=${selectedMonth}`),
       api(`/savings?month=${selectedMonth}`),
+      api('/accounts'),
     ])
     if (version !== loadVersion) return
     summary.value = summaryData
     transactions.value = transactionData
     budgetGroups.value = budgetData.groups
     savingsGoals.value = savingsData.goals
+    accounts.value = accountData
     if (!movementForm.value.savingsGoalId && savingsGoals.value.length) movementForm.value.savingsGoalId = savingsGoals.value[0].id
   } catch (error) {
     if (version === loadVersion) errorMessage.value = error.message
@@ -213,6 +219,37 @@ async function removeBudgetItem(item) {
   } catch (error) { errorMessage.value = error.message }
 }
 
+async function createAccount(name, onSuccess) {
+  saving.value = true
+  errorMessage.value = ''
+  try {
+    await api('/accounts', { method: 'POST', body: JSON.stringify({ name }) })
+    onSuccess()
+    await loadData()
+  } catch (error) {
+    errorMessage.value = error.message
+  } finally {
+    saving.value = false
+  }
+}
+
+async function assignSavingsAccount(goal, event) {
+  const select = event.target
+  saving.value = true
+  errorMessage.value = ''
+  try {
+    await api(`/savings/goals/${goal.id}/account`, {
+      method: 'PATCH', body: JSON.stringify({ bankAccountId: select.value || null }),
+    })
+    await loadData()
+  } catch (error) {
+    select.value = goal.bankAccountId ?? ''
+    errorMessage.value = error.message
+  } finally {
+    saving.value = false
+  }
+}
+
 async function saveGoal() {
   saving.value = true
   try {
@@ -315,7 +352,22 @@ async function removeGoal(goal) {
           </section>
 
           <section class="lower-grid">
-            <article class="panel transactions-panel"><div class="panel-heading"><div><h2>Movimientos recientes</h2><p>Registros del mes seleccionado</p></div><button class="text-link" @click="activeView = 'Movimientos'">Ver todos →</button></div><div v-if="recentTransactions.length" class="transaction-table"><div class="table-head"><span>DETALLE</span><span>CATEGORÍA</span><span>MONTO</span></div><div v-for="item in recentTransactions" :key="item.id" class="transaction-row"><div class="transaction-title"><span class="transaction-mark" :class="item.type === 'income' ? 'mint' : 'peach'">{{ item.type === 'income' ? '↗' : '•' }}</span><span><b>{{ item.description }}</b><small>{{ formatDate(item.transactionDate) }}<template v-if="item.type === 'expense'"> · {{ item.paid ? 'Pagado' : 'Pendiente' }}</template></small></span></div><span class="category-pill">{{ transactionCategory(item) }}</span><b class="transaction-amount" :class="item.type">{{ item.type === 'income' ? '+' : '−' }}{{ formatMoney(item.amount) }}</b></div></div><div v-else class="empty-state">Todavía no has registrado movimientos. Usa “Agregar movimiento” para comenzar.</div></article>
+            <article class="panel transactions-panel"><div class="panel-heading"><div><h2>Movimientos recientes</h2><p>Registros del mes seleccionado</p></div><button class="text-link" @click="activeView = 'Movimientos'">Ver todos →</button></div><div v-if="recentTransactions.length" class="transaction-table"><div class="table-head"><span>DETALLE</span><span>CATEGORÍA</span><span>MONTO</span></div><div v-for="item in recentTransactions" :key="item.id" class="transaction-row"><div class="transaction-title"><span class="transaction-mark" :class="item.type === 'income' ? 'mint' : 'peach'">{{ item.type === 'income' ? '↗' : '•' }}</span><span><b>{{ item.description }}</b><small>{{ formatDate(item.transactionDate) }}<template v-if="item.type === 'expense'"> · {{ item.paid ? 'Pagado' : 'Pendiente' }}</template></small></span></div><span class="category-pill">{{ transactionCategory(item) }}</span><b class="transaction-amount" :class="item.type">{{ item.type === 'income' ? '+' : '−' }}{{ formatMoney(item.amount) }}</b></div></div><div v-else class="empty-state">Todavía no has registrado movimientos. Usa “Agregar movimiento” para comenzar.</div>
+              <section v-if="pendingDebts.length" class="pending-debt-list">
+                <div class="panel-heading">
+                  <h2>Pendiente por pagar</h2>
+                  <button class="text-link" @click="activeView = 'Deudas fijas'">Ver deudas →</button>
+                </div>
+                <div v-for="debt in pendingDebts" :key="debt.id" class="budget-meta">
+                  <span class="budget-name"><b>{{ debt.name }}</b></span>
+                  <span class="budget-numbers"><b>{{ formatMoney(debt.amount) }}</b></span>
+                </div>
+                <div class="budget-meta">
+                  <span class="budget-name"><b>Total pendiente</b></span>
+                  <span class="budget-numbers"><b>{{ formatMoney(pendingDebtTotal) }}</b></span>
+                </div>
+              </section>
+            </article>
             <article class="panel savings-panel"><div class="panel-heading"><div><h2>Mis ahorros</h2><p>Saldo acumulado por meta</p></div><button class="text-link" @click="activeView = 'Ahorros'">Ver todo →</button></div><div v-if="savingsGoals.length" class="mini-goals"><div v-for="goal in savingsGoals.slice(0, 3)" :key="goal.id" class="savings-goal"><div class="goal-top"><span class="goal-icon mint">◉</span><span class="goal-label"><b>{{ goal.name }}</b><small>{{ goal.targetAmount ? `Meta: ${formatMoney(goal.targetAmount)}` : 'Sin monto objetivo' }}</small></span><b v-if="goal.targetAmount" class="goal-percent">{{ Math.round(goal.balance / goal.targetAmount * 100) }}%</b></div><div v-if="goal.targetAmount" class="progress-track"><span :style="{ width: `${Math.min(goal.balance / goal.targetAmount * 100, 100)}%` }"></span></div><div class="goal-bottom"><b>{{ formatMoney(goal.balance) }}</b><small>+ {{ formatMoney(goal.contributedThisMonth) }} este mes</small></div></div></div><div v-else class="empty-state compact">Crea una meta para empezar a acumular.</div></article>
           </section>
         </template>
@@ -346,14 +398,32 @@ async function removeGoal(goal) {
           <article class="panel full-panel"><div class="panel-heading"><div><h2>Ahorros acumulados</h2><p>Consulta el saldo y los aportes por meta de ahorro.</p></div><div class="savings-total-card"><small>TOTAL AHORRADO</small><strong>{{ formatMoney(summary.savingsTotal) }}</strong></div></div>
             <div class="savings-forms"><form class="inline-form" @submit.prevent="saveGoal"><h3>Crear meta</h3><label class="field-label">Nombre<input v-model="goalForm.name" placeholder="Fondo de emergencia" required maxlength="100"></label><label class="field-label">Monto objetivo<input v-model="goalForm.targetAmount" type="number" min="0.01" step="0.01" placeholder="Opcional"></label><label class="field-label">Aporte mensual planeado<input v-model="goalForm.monthlyContribution" type="number" min="0" step="0.01"></label><button class="primary-button" :disabled="saving">Crear meta</button></form>
               <form class="inline-form" @submit.prevent="saveMovement"><h3>Registrar movimiento de ahorro</h3><label class="field-label">Meta<select v-model="movementForm.savingsGoalId" required><option value="" disabled>Selecciona una meta</option><option v-for="goal in savingsGoals" :key="goal.id" :value="goal.id">{{ goal.name }}</option></select></label><label class="field-label">Movimiento<select v-model="movementForm.type"><option value="deposit">Aporte</option><option value="withdrawal">Retiro</option></select></label><label class="field-label">Monto<input v-model="movementForm.amount" type="number" min="0.01" step="0.01" required></label><label class="field-label">Fecha<input v-model="movementForm.movementDate" type="date" required></label><button class="primary-button" :disabled="saving || !savingsGoals.length">Guardar movimiento</button></form></div>
-            <div v-if="savingsGoals.length" class="goal-grid"><article v-for="goal in savingsGoals" :key="goal.id" class="goal-card"><div class="goal-card-head"><span class="goal-icon mint">◉</span><button class="icon-action" aria-label="Eliminar meta" @click="removeGoal(goal)">×</button></div><h3>{{ goal.name }}</h3><p>{{ goal.targetAmount ? `Meta de ${formatMoney(goal.targetAmount)}` : 'Sin monto objetivo' }}</p><div v-if="goal.targetAmount" class="progress-track"><span :style="{ width: `${Math.min(goal.balance / goal.targetAmount * 100, 100)}%` }"></span></div><div class="goal-bottom"><b>{{ formatMoney(goal.balance) }}</b><small>+ {{ formatMoney(goal.contributedThisMonth) }} en {{ monthLabel }}</small></div></article></div><div v-else class="empty-state">Todavía no tienes metas de ahorro. Crea una para comenzar a acumular.</div>
+            <div v-if="savingsGoals.length" class="goal-grid"><article v-for="goal in savingsGoals" :key="goal.id" class="goal-card"><div class="goal-card-head"><span class="goal-icon mint">◉</span><button class="icon-action" aria-label="Eliminar meta" @click="removeGoal(goal)">×</button></div><h3>{{ goal.name }}</h3><label class="field-label">Cuenta del ahorro
+              <select :value="goal.bankAccountId ?? ''" :disabled="saving" @change="assignSavingsAccount(goal, $event)">
+                <option value="">Sin cuenta asignada</option>
+                <option v-for="account in accounts" :key="account.id" :value="account.id">{{ account.name }}</option>
+              </select>
+            </label><p>{{ goal.targetAmount ? `Meta de ${formatMoney(goal.targetAmount)}` : 'Sin monto objetivo' }}</p><div v-if="goal.targetAmount" class="progress-track"><span :style="{ width: `${Math.min(goal.balance / goal.targetAmount * 100, 100)}%` }"></span></div><div class="goal-bottom"><b>{{ formatMoney(goal.balance) }}</b><small>+ {{ formatMoney(goal.contributedThisMonth) }} en {{ monthLabel }}</small></div></article></div><div v-else class="empty-state">Todavía no tienes metas de ahorro. Crea una para comenzar a acumular.</div>
           </article>
         </section>
+
+        <Accounts
+          v-if="activeView === 'Cuentas'"
+          v-show="!loading"
+          :accounts="accounts"
+          :debts="fixedDebts"
+          :goals="savingsGoals"
+          :month-label="monthLabel"
+          :format-money="formatMoney"
+          :saving="saving"
+          @create="createAccount"
+        />
 
         <FixedDebts
           v-if="activeView === 'Deudas fijas' && month"
           v-show="!loading"
           :debts="fixedDebts"
+          :accounts="accounts"
           :month="month"
           :month-label="monthLabel"
           :today="localDate()"

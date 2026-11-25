@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { Op } from 'sequelize'
 import { z } from 'zod'
 import { sequelize } from '../config/database.js'
-import { FixedDebt, FixedDebtPlan, FixedDebtPeriod, Transaction } from '../models/index.js'
+import { BankAccount, FixedDebt, FixedDebtPlan, FixedDebtPeriod, Transaction } from '../models/index.js'
 import { dateSchema, monthFromQuery, monthSchema, positiveAmount } from './finance-validation.js'
 
 export const fixedDebtsRouter = Router()
@@ -50,6 +50,8 @@ export async function getFixedDebts(month) {
       plannedName: plan.name,
       plannedAmount: Number(plan.amount),
       firstContribution,
+      firstAccountId: period?.firstAccountId ?? null,
+      secondAccountId: period?.secondAccountId ?? null,
       secondContribution,
       reserved,
       paid: Boolean(period?.payment),
@@ -126,6 +128,7 @@ updateDebt('delete', '/:id', z.object({ month: monthStart }), async ({ data, deb
 })
 
 const contributionSchema = z.object({
+  bankAccountId: uuid.nullable().optional(),
   month: monthStart,
   amount: z.coerce.number().finite().min(0).max(9999999999.99).multipleOf(0.01),
 })
@@ -138,8 +141,15 @@ updateDebt('put', '/:id/contributions/:half', contributionSchema.extend({
   if (archived && !period) return { status: 409, message: 'La deuda ya está archivada para este mes.' }
 
   const field = data.half === '1' ? 'firstContribution' : 'secondContribution'
-  if (period) await period.update({ [field]: data.amount }, { transaction })
-  else await FixedDebtPeriod.create({ ...where, [field]: data.amount }, { transaction })
+  const accountField = data.half === '1' ? 'firstAccountId' : 'secondAccountId'
+  const accountId = data.amount === 0 ? null : (data.bankAccountId === undefined ? period?.[accountField] : data.bankAccountId)
+  if (accountId && !await BankAccount.findByPk(accountId, { transaction })) {
+    return { status: 400, message: 'La cuenta seleccionada no existe.' }
+  }
+
+  const values = { [field]: data.amount, [accountField]: accountId ?? null }
+  if (period) await period.update(values, { transaction })
+  else await FixedDebtPeriod.create({ ...where, ...values }, { transaction })
 })
 
 const paymentSchema = z.object({ month: monthStart, paid: z.boolean(), paymentDate: dateSchema.optional() })

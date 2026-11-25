@@ -12,6 +12,13 @@ async function start() {
     // Existing expenses were already deducted before payment status was introduced.
     await sequelize.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS paid BOOLEAN NOT NULL DEFAULT TRUE')
     await sequelize.query('ALTER TABLE transactions ALTER COLUMN paid SET DEFAULT FALSE')
+    await sequelize.query(`
+      ALTER TABLE savings_goals
+        ADD COLUMN IF NOT EXISTS bank_account_id UUID REFERENCES bank_accounts(id) ON DELETE RESTRICT;
+      ALTER TABLE fixed_debt_periods
+        ADD COLUMN IF NOT EXISTS first_account_id UUID REFERENCES bank_accounts(id) ON DELETE RESTRICT,
+        ADD COLUMN IF NOT EXISTS second_account_id UUID REFERENCES bank_accounts(id) ON DELETE RESTRICT;
+    `)
 
     const starterGroups = [
       { name: 'Deudas fijas', color: '#ed8c70', items: ['Préstamo'] },

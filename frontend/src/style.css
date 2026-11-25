@@ -99,3 +99,13 @@
 .fixed-debts-panel .panel-heading {
   flex-wrap: wrap;
 }
+
+.pending-debt-list {
+  border-top: 1px solid var(--line);
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+.pending-debt-list .budget-meta {
+  padding: 5px 0;
+}

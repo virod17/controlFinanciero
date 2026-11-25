@@ -36,9 +36,15 @@ export const MonthlyBudget = sequelize.define('MonthlyBudget', {
   indexes: [{ unique: true, fields: ['month', 'budget_item_id'] }],
 })
 
+export const BankAccount = sequelize.define('BankAccount', {
+  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  name: { type: DataTypes.STRING(100), allowNull: false },
+}, { tableName: 'bank_accounts', underscored: true })
+
 export const SavingsGoal = sequelize.define('SavingsGoal', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
   name: { type: DataTypes.STRING(100), allowNull: false },
+  bankAccountId: { type: DataTypes.UUID, allowNull: true },
   targetAmount: { type: DataTypes.DECIMAL(12, 2), allowNull: true, field: 'target_amount' },
   monthlyContribution: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0, field: 'monthly_contribution' },
 }, { tableName: 'savings_goals', underscored: true })
@@ -70,6 +76,8 @@ export const FixedDebtPeriod = sequelize.define('FixedDebtPeriod', {
   month: { type: DataTypes.DATEONLY, primaryKey: true },
   firstContribution: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
   secondContribution: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
+  firstAccountId: { type: DataTypes.UUID, allowNull: true },
+  secondAccountId: { type: DataTypes.UUID, allowNull: true },
   paymentTransactionId: { type: DataTypes.UUID, allowNull: true, unique: true },
 }, { tableName: 'fixed_debt_periods', underscored: true })
 
@@ -86,3 +94,7 @@ BudgetItem.hasMany(MonthlyBudget, { foreignKey: 'budgetItemId', as: 'monthlyBudg
 MonthlyBudget.belongsTo(BudgetItem, { foreignKey: 'budgetItemId', as: 'budgetItem' })
 SavingsGoal.hasMany(SavingsMovement, { foreignKey: 'savingsGoalId', as: 'movements', onDelete: 'CASCADE' })
 SavingsMovement.belongsTo(SavingsGoal, { foreignKey: 'savingsGoalId', as: 'goal' })
+
+SavingsGoal.belongsTo(BankAccount, { foreignKey: 'bankAccountId', as: 'bankAccount', onDelete: 'RESTRICT' })
+FixedDebtPeriod.belongsTo(BankAccount, { foreignKey: 'firstAccountId', as: 'firstAccount', onDelete: 'RESTRICT' })
+FixedDebtPeriod.belongsTo(BankAccount, { foreignKey: 'secondAccountId', as: 'secondAccount', onDelete: 'RESTRICT' })
