@@ -80,3 +80,22 @@
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
   }
 }
+
+.expense-categories {
+  margin-top: 14px;
+}
+
+.expense-categories summary {
+  color: #326d60;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.expense-categories[open] summary {
+  margin-bottom: 16px;
+}
+
+.fixed-debts-panel .panel-heading {
+  flex-wrap: wrap;
+}

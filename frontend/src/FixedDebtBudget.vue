@@ -51,13 +51,13 @@ function archive(debt) {
   <article class="panel full-panel">
     <div class="panel-heading">
       <div>
-        <h2>Cuotas de deudas fijas</h2>
-        <p>Planifica las cuotas desde {{ monthLabel }}. Los aportes y pagos se registran en Deudas fijas.</p>
+        <h2>Cuotas mensuales</h2>
+        <p>Las cuotas se aplican desde {{ monthLabel }} y se repiten cada mes.</p>
       </div>
     </div>
     <form class="budget-create-form debt-plan-form" @submit.prevent="submitPlan">
       <label class="field-label">Concepto
-        <input v-model="plan.name" placeholder="Ej. Préstamo de casa" maxlength="100" required>
+        <input v-model="plan.name" placeholder="Ej. Préstamo personal o servicio de luz" maxlength="100" required>
       </label>
       <label class="field-label">Cuota mensual
         <input v-model.number="plan.amount" type="number" min="0.01" max="9999999999.99" step="0.01" required>

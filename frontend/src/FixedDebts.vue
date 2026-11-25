@@ -9,7 +9,7 @@ const props = defineProps({
   formatMoney: { type: Function, required: true },
   saving: Boolean,
 })
-const emit = defineEmits(['save'])
+const emit = defineEmits(['save', 'open-budget'])
 const contribution = ref(null)
 const payment = ref(null)
 const total = computed(() => props.debts.reduce((sum, debt) => sum + debt.amount, 0))
@@ -61,8 +61,9 @@ function submitPayment() {
     <div class="panel-heading">
       <div>
         <h2>Deudas fijas de {{ monthLabel }}</h2>
-        <p>Aparta dinero el día 15 y en la segunda quincena, que cierra el día {{ lastDay }}.</p>
+        <p>Registra los aportes y pagos de las cuotas presupuestadas para este mes.</p>
       </div>
+      <button class="text-link" @click="emit('open-budget')">Editar presupuesto →</button>
       <div class="savings-total-card">
         <small>TOTAL DEL MES</small>
         <strong>{{ formatMoney(total) }}</strong>
@@ -74,8 +75,8 @@ function submitPayment() {
         <h3>{{ debt.name }}</h3>
         <p>{{ formatMoney(debt.amount) }} al mes · {{ debt.paid ? 'Pagada' : 'Pendiente' }}<template v-if="debt.archived"> · Archivada</template></p>
         <dl class="debt-amounts">
-          <div><dt>Primera quincena</dt><dd>{{ formatMoney(debt.firstContribution) }}</dd></div>
-          <div><dt>Segunda quincena</dt><dd>{{ formatMoney(debt.secondContribution) }}</dd></div>
+          <div><dt>Aporte 1.ª quincena</dt><dd>{{ formatMoney(debt.firstContribution) }}</dd></div>
+          <div><dt>Aporte 2.ª quincena</dt><dd>{{ formatMoney(debt.secondContribution) }}</dd></div>
           <div><dt>Total apartado</dt><dd>{{ formatMoney(debt.reserved) }}</dd></div>
           <div v-if="!debt.paid"><dt>Por apartar</dt><dd>{{ formatMoney(Math.max(0, debt.amount - debt.reserved)) }}</dd></div>
         </dl>
